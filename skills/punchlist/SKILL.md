@@ -45,5 +45,5 @@ Set `idempotency_key` on any write you might retry.
 
 Deleting tasks and admin actions aren't available to agents. Private tasks need the
 `private:read` and `private:write` scopes, and only reach what your person can see.
-If a tool says a scope is missing, tell the person; they can change it under
-Settings, then Agents.
+If a tool says a scope is missing, tell the person. Scopes are set when a token is
+made, so they'd make a new one under Settings, then Agents.

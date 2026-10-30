@@ -58,10 +58,9 @@ const LAST_SEEN_EVERY_MS = 60 * 60_000;
 
 function loadDevice(id: string, now: number): LanDeviceActor {
   const row = db().query<{ name: string | null; last_seen_at: number }, [string]>("SELECT name, last_seen_at FROM lan_devices WHERE id = ?").get(id);
-  if (!row) {
-    db().query("INSERT OR IGNORE INTO lan_devices (id, created_at, last_seen_at) VALUES (?, ?, ?)").run(id, now, now);
-    return { kind: "lan_device", deviceId: id, deviceName: null };
-  }
+  // A row only once it has a name: a client that drops its cookie would otherwise
+  // add one per request.
+  if (!row) return { kind: "lan_device", deviceId: id, deviceName: null };
   if (now - row.last_seen_at >= LAST_SEEN_EVERY_MS) db().query("UPDATE lan_devices SET last_seen_at = ? WHERE id = ?").run(now, id);
   return { kind: "lan_device", deviceId: id, deviceName: row.name };
 }
@@ -99,7 +98,10 @@ export async function resolveRequest(request: Request, now: number = Date.now())
 /** A device naming itself. The name is unverified by construction, and labelled so everywhere. */
 export function setDeviceName(actor: LanDeviceActor, name: unknown): LanDeviceActor {
   const clean = typeof name === "string" ? name.trim().replace(/\s+/g, " ").slice(0, DEVICE_NAME_MAX_LENGTH) : "";
-  db().query("UPDATE lan_devices SET name = ? WHERE id = ?").run(clean || null, actor.deviceId);
+  const now = Date.now();
+  db()
+    .query("INSERT INTO lan_devices (id, name, created_at, last_seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen_at = excluded.last_seen_at")
+    .run(actor.deviceId, clean || null, now, now);
   return { ...actor, deviceName: clean || null };
 }
 

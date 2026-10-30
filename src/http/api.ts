@@ -1,7 +1,7 @@
 import { deleteUpload, serveAttachment, serveThumb, storeUpload } from "../attachment-store.ts";
 import { type Actor, actorLabel } from "../actors.ts";
 import { site } from "../config.server.ts";
-import { ForbiddenError, UnauthorizedError } from "../errors.ts";
+import { ForbiddenError, UnauthorizedError, UserInputError } from "../errors.ts";
 import { listFilterSchema } from "../task-schema.ts";
 import {
   addComment,
@@ -65,6 +65,14 @@ function route(method: string, path: string, handler: Handler, options: { rawBod
 }
 
 const mutating = (method: string) => method !== "GET" && method !== "HEAD";
+
+function decodeKey(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    throw new UserInputError("That key isn't valid.");
+  }
+}
 
 function queryFilter(url: URL) {
   const q = url.searchParams;
@@ -131,7 +139,7 @@ route("DELETE", "/api/v1/attachments/:id", ({ actor, write }, { id }) => {
 });
 
 route("POST", "/api/v1/dedupe/:key/complete", async ({ actor, request, write }, { key }) => {
-  const task = completeByDedupeKey(actor, decodeURIComponent(key!), (await readJson(request)) as never, write);
+  const task = completeByDedupeKey(actor, decodeKey(key!), (await readJson(request)) as never, write);
   return json({ task, closed: task != null });
 });
 

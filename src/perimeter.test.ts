@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { config, perimeterHeader, setConfigForTests } from "./config.server.ts";
+import { db } from "./db.server.ts";
 import { apiFromRequest } from "./http/api.ts";
 import { assertSameOrigin } from "./http/guard.ts";
 import { isOnSite, resolveRequest } from "./http/resolve-actor.ts";
@@ -150,5 +151,37 @@ describe("TRUSTED_PERIMETER_HEADER itself", () => {
       expect(() => perimeterHeader(name)).toThrow();
     }
     expect(perimeterHeader("X-Punchlist-Perimeter")).toBe("x-punchlist-perimeter");
+  });
+});
+
+describe("what an anonymous device can cost", () => {
+  test("a body has a limit", async () => {
+    freshWorld();
+    const big = post("/api/v1/tasks", { ...onSite, ...json }, { title: "x", details: "y".repeat(2 * 1024 * 1024) });
+    expect((await apiFromRequest(big)).status).toBe(413);
+  });
+
+  test("a client that keeps dropping its cookie leaves no rows behind", async () => {
+    freshWorld();
+    const count = () => db().query<{ n: number }, []>("SELECT COUNT(*) AS n FROM lan_devices").get()!.n;
+    const before = count();
+    for (let i = 0; i < 5; i++) await apiFromRequest(tasks(onSite));
+    expect(count()).toBe(before);
+  });
+
+  test("a device that names itself gets a row, and keeps the name", async () => {
+    freshWorld();
+    const resolved = await resolveRequest(tasks(onSite));
+    const id = resolved.newDeviceId!;
+    const rename = new Request(`${ORIGIN}/api/v1/device`, { method: "PATCH", headers: { ...onSite, ...json, Cookie: await deviceHeader(id) }, body: JSON.stringify({ name: "Sam" }) });
+    expect(((await (await apiFromRequest(rename)).json()) as { label: string }).label).toBe('On-site device, "Sam" (unverified)');
+    const again = await resolveRequest(tasks({ ...onSite, Cookie: await deviceHeader(id) }));
+    expect(again.actor).toMatchObject({ kind: "lan_device", deviceName: "Sam" });
+  });
+
+  test("a mangled dedupe key is a bad request, not a crash", async () => {
+    const w = freshWorld();
+    const response = await apiFromRequest(post("/api/v1/dedupe/%E0%A4%A/complete", { Authorization: `Bearer ${agentFor(w.alice).token}` }));
+    expect(response.status).toBe(400);
   });
 });
