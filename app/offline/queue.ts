@@ -1,5 +1,5 @@
 /**
- * Queued check-offs. Warehouse Wi-Fi drops out, and a tick has to stick anyway,
+ * Queued check-offs. Wi-Fi in a big building drops out, and a tick has to stick anyway,
  * so every check-off is written here first and sent from here, online or not.
  *
  * Each entry has a client-made id that goes to the server as its Idempotency-Key,
