@@ -1,0 +1,26 @@
+node_modules
+build
+.react-router
+data
+.env
+.env.*
+.git
+.gitignore
+*.log
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+docs
+# The plan names a deployment; the public image must not carry it.
+plans
+ISSUES.md
+README.md
+# tests never ship in the image
+e2e
+playwright.config.ts
+test-results
+playwright-report
+src/testing
+src/**/*.test.ts
+app/**/*.test.ts

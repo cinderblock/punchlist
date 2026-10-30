@@ -1,0 +1,28 @@
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# deps / build
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.react-router/
+
+# local SQLite db + WAL/SHM sidecars
+data/
+
+# logs
+logs/
+*.log
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Playwright output
+test-results/
+playwright-report/
