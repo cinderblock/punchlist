@@ -55,4 +55,4 @@ ENV APP_REVISION=$REVISION
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
   CMD ["bun", "-e", "const s = process.env.SOCKET_PATH; const r = await fetch(s ? 'http://localhost/healthz' : `http://127.0.0.1:${process.env.PORT ?? 3000}/healthz`, s ? { unix: s } : {}); process.exit(r.ok ? 0 : 1)"]
 
-CMD ["bun", "run", "start"]
+CMD ["bun", "server.ts"]

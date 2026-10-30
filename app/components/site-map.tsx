@@ -89,14 +89,19 @@ export function SiteMap({
           </g>
         );
       })}
-      {map.places.map((p) => (
+      {map.places.map((p) => {
+        // Toward the middle of the map, so a name by a far wall stays on it.
+        const right = p.x < b.minX + width / 2;
+        const low = (p.y - b.minY) / height < 0.1;
+        return (
         <g key={p.id} style={{ pointerEvents: "none" }}>
           <circle cx={p.x} cy={sy(p.y)} r={unit * 0.6} fill="var(--mantine-color-dimmed)" />
-          <text x={p.x + unit} y={sy(p.y)} dominantBaseline="middle" fontSize={unit * 1.9} fill="var(--mantine-color-dimmed)">
+          <text x={p.x + (right ? unit : -unit)} y={sy(p.y) + (up === low ? -unit * 1.5 : 0)} textAnchor={right ? "start" : "end"} dominantBaseline="middle" fontSize={unit * 1.9} fill="var(--mantine-color-dimmed)">
             {p.name}
           </text>
         </g>
-      ))}
+        );
+      })}
       {pins.map((pin) => (
         <g
           key={pin.id}

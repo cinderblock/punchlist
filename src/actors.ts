@@ -84,7 +84,7 @@ export function actorId(actor: Actor): string {
   }
 }
 
-/** How the actor is shown, everywhere: "Claude Code, for Cameron". */
+/** How the actor is shown, everywhere: "Claude Code, for Sam". */
 export function actorLabel(actor: Actor): string {
   switch (actor.kind) {
     case "user":
