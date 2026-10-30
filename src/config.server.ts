@@ -115,13 +115,24 @@ const RESERVED_HEADERS = new Set(["host", "cookie", "authorization", "origin", "
  * of its own: pointing it at one a client always controls would hand out the
  * anonymous tier to anybody.
  */
-export function perimeterHeader(raw: string | undefined): string | null {
+export function perimeterHeader(raw: string | undefined, variable = "TRUSTED_PERIMETER_HEADER"): string | null {
   const value = raw?.trim();
   if (!value) return null;
   if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(value) || RESERVED_HEADERS.has(value.toLowerCase())) {
-    throw new Error(`TRUSTED_PERIMETER_HEADER must be a dedicated header name (got ${JSON.stringify(raw)})`);
+    throw new Error(`${variable} must be a dedicated header name (got ${JSON.stringify(raw)})`);
   }
   return value.toLowerCase();
+}
+
+/** Where a browser's push subscription may point, when config doesn't say. A leading dot means any subdomain. */
+const DEFAULT_PUSH_HOSTS = ["fcm.googleapis.com", "updates.push.services.mozilla.com", ".push.apple.com", ".notify.windows.com"];
+
+function pushHosts(raw: string | undefined): string[] {
+  const hosts = raw
+    ?.split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return hosts?.length ? hosts : DEFAULT_PUSH_HOSTS;
 }
 
 const configFile = process.env.CONFIG_FILE || "/config/punchlist.yaml";
@@ -154,6 +165,13 @@ export const config = {
    */
   perimeterHeader: perimeterHeader(process.env.TRUSTED_PERIMETER_HEADER),
 
+  /**
+   * Lower-cased name of a header the proxy overwrites with the client's address,
+   * or null. Used only to give passkey ceremonies a rate limit per address. It
+   * never feeds a permission. Read it through trustedClientIpHeader().
+   */
+  clientIpHeader: perimeterHeader(process.env.TRUSTED_CLIENT_IP_HEADER, "TRUSTED_CLIENT_IP_HEADER"),
+
   /** Every date and time, shown and judged. The config file wins over TZ. */
   timezone: siteFile.timezone ?? process.env.TZ ?? "UTC",
 
@@ -172,6 +190,11 @@ export const config = {
     vapidSubject: vapidSubject(process.env.VAPID_SUBJECT || process.env.PUBLIC_BASE_URL || ""),
     /** How often reminders are checked for, in seconds. 0 turns them off (tests still send). */
     checkEverySeconds: nonNegativeInt("NOTIFY_EVERY_SECONDS", 60),
+    /**
+     * The hosts a subscription may name. The server makes the request, so without
+     * this a signed-in person could point it at anything it can reach.
+     */
+    endpointHosts: pushHosts(process.env.PUSH_ENDPOINT_HOSTS),
   },
 
   /**
@@ -183,7 +206,7 @@ export const config = {
 
 // ---- test seams ----------------------------------------------------------------------
 
-type Overrides = { site?: SiteConfig; perimeterHeader?: string | null };
+type Overrides = { site?: SiteConfig; perimeterHeader?: string | null; clientIpHeader?: string | null };
 type GlobalWithOverrides = typeof globalThis & { __punchlistConfigOverrides__?: Overrides };
 
 /** The deployment's config. A function so tests can swap in a map. */
@@ -195,6 +218,12 @@ export function site(): SiteConfig {
 export function trustedPerimeterHeader(): string | null {
   const overrides = (globalThis as GlobalWithOverrides).__punchlistConfigOverrides__;
   return overrides && "perimeterHeader" in overrides ? (overrides.perimeterHeader ?? null) : config.perimeterHeader;
+}
+
+/** The client-address header's name, or null when there isn't one to trust. */
+export function trustedClientIpHeader(): string | null {
+  const overrides = (globalThis as GlobalWithOverrides).__punchlistConfigOverrides__;
+  return overrides && "clientIpHeader" in overrides ? (overrides.clientIpHeader ?? null) : config.clientIpHeader;
 }
 
 export function setConfigForTests(overrides: Overrides | undefined): void {
@@ -214,6 +243,7 @@ export function describeConfig(): string {
     `  space               ${s.name}, ${s.maps.length} map(s), ${s.zones.length + s.maps.reduce((n, m) => n + m.zones.length, 0)} zone(s)`,
     `  time zone           ${config.timezone}`,
     `  on-site tier        ${header ? `on, from header ${header}` : "off (TRUSTED_PERIMETER_HEADER unset)"}`,
+    `  ceremony limits     ${trustedClientIpHeader() ? `per address, from header ${trustedClientIpHeader()}` : "shared (TRUSTED_CLIENT_IP_HEADER unset)"}`,
     `  web push            ${
       p.vapidProblem
         ? `OFF: ${p.vapidProblem}`

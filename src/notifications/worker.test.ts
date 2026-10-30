@@ -233,7 +233,7 @@ test("the payload is Declarative Web Push, with an absolute navigate", () => {
 
 test("only a browser's real subscription is accepted", () => {
   const keys = { p256dh: "abc", auth: "def" };
-  expect(parseBrowserSubscription({ endpoint: "https://push.example.test/1", keys }).endpoint).toBeTruthy();
+  expect(parseBrowserSubscription({ endpoint: "https://fcm.googleapis.com/fcm/send/1", keys }).endpoint).toBeTruthy();
   expect(() => parseBrowserSubscription({ endpoint: "http://push.example.test/1", keys })).toThrow();
   expect(() => parseBrowserSubscription({ endpoint: "file:///etc/passwd", keys })).toThrow();
   expect(() => parseBrowserSubscription(null)).toThrow();

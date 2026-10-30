@@ -1,4 +1,5 @@
 import { audit } from "../audit.ts";
+import { config } from "../config.server.ts";
 import { db } from "../db.server.ts";
 import { UserInputError } from "../errors.ts";
 import { describeUserAgent } from "../user-agent.ts";
@@ -58,6 +59,12 @@ export interface BrowserSubscription {
 
 const BASE64URL = /^[A-Za-z0-9_-]+=*$/;
 
+/** A known push service. The server itself makes this request, so where it goes can't be up to the client. */
+export function pushHostAllowed(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return config.push.endpointHosts.some((allowed) => (allowed.startsWith(".") ? host.endsWith(allowed) : host === allowed));
+}
+
 export function parseBrowserSubscription(value: unknown): BrowserSubscription {
   const v = value as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } } | null;
   const endpoint = typeof v?.endpoint === "string" ? v.endpoint : "";
@@ -71,7 +78,7 @@ export function parseBrowserSubscription(value: unknown): BrowserSubscription {
   }
   // Push services are always https. Anything else is not a browser's
   // subscription, and the server would be the one making the request.
-  if (!url || url.protocol !== "https:" || endpoint.length > 1000) {
+  if (!url || url.protocol !== "https:" || endpoint.length > 1000 || !pushHostAllowed(url.hostname)) {
     throw new UserInputError("This browser's notification subscription didn't look right.");
   }
   if (!BASE64URL.test(p256dh) || !BASE64URL.test(auth) || p256dh.length > 200 || auth.length > 100) {
@@ -194,6 +201,7 @@ export interface Queued {
   body: string;
   url: string;
   createdAt: number;
+  taskId: string | null;
 }
 
 interface LogRow {
@@ -207,16 +215,17 @@ interface LogRow {
   created_at: number;
   sent_at: number | null;
   delivered: number;
+  task_id: string | null;
 }
 
-const toQueued = (r: LogRow): Queued => ({ id: r.id, userId: r.user_id, kind: r.kind, key: r.key, title: r.title, body: r.body, url: r.url, createdAt: r.created_at });
+const toQueued = (r: LogRow): Queued => ({ id: r.id, userId: r.user_id, kind: r.kind, key: r.key, title: r.title, body: r.body, url: r.url, createdAt: r.created_at, taskId: r.task_id });
 
 /** Queue a notification. Each (person, kind, key) exists once, ever: that's the dedupe. */
-export function enqueue(args: { userId: number; kind: NotificationKind; key: string; title: string; body: string; url: string; now: number }): boolean {
+export function enqueue(args: { userId: number; kind: NotificationKind; key: string; title: string; body: string; url: string; now: number; taskId?: string | null }): boolean {
   return (
     db()
-      .query("INSERT OR IGNORE INTO notification_log (user_id, kind, key, title, body, url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(args.userId, args.kind, args.key, args.title, args.body, args.url, args.now).changes > 0
+      .query("INSERT OR IGNORE INTO notification_log (user_id, kind, key, title, body, url, created_at, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(args.userId, args.kind, args.key, args.title, args.body, args.url, args.now, args.taskId ?? null).changes > 0
   );
 }
 

@@ -25,8 +25,10 @@ const PER_MINUTE: Record<Actor["kind"], number> = {
 
 /** Every anonymous device together. */
 const LAN_SHARED_PER_MINUTE = 200;
-/** Passkey ceremonies, which by nature have no actor yet. Generous: it's a brake on floods, not a lockout. */
+/** Passkey ceremonies have no actor yet. With nothing to tell callers apart, one generous shared brake. */
 export const CEREMONIES_PER_MINUTE = 300;
+/** With an address to go on: plenty for a person, and one flood can't block anyone else. */
+export const CEREMONIES_PER_ADDRESS_PER_MINUTE = 30;
 
 interface Bucket {
   start: number;

@@ -7,6 +7,7 @@ import morgan from "morgan";
 import type { ServerBuild } from "react-router";
 
 import { config } from "./src/config.server.ts";
+import { hostAllowed } from "./src/http/host.ts";
 import { openSocket, prepareSocket, removeSocket } from "./src/socket.ts";
 
 /**
@@ -33,6 +34,16 @@ const build = (await import(BUILD)) as ServerBuild;
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", false);
+
+const publicHost = new URL(config.publicBaseUrl).host;
+
+app.use((req, res, next) => {
+  if (hostAllowed(req.headers.host, req.path, publicHost)) {
+    next();
+    return;
+  }
+  res.status(421).type("text/plain").send("Misdirected request\n");
+});
 
 app.use(
   compression({
@@ -75,7 +86,6 @@ morgan.token("safe-url", (req) => {
 });
 app.use(morgan(":method :safe-url :status :res[content-length] - :response-time ms"));
 
-const publicHost = new URL(config.publicBaseUrl).host;
 app.use(createRequestHandler({ build: { ...build, allowedActionOrigins: [publicHost] } }));
 
 const onError = (err: unknown) => {

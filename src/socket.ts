@@ -11,8 +11,11 @@ import { dirname } from "node:path";
  *   running server, which goes on looking healthy with no way to reach it.
  *
  *   A socket is created with this process's umask, and the reverse proxy runs
- *   as another user, so it's opened up after binding. What actually keeps other
- *   users out is the directory it lives in, which only the proxy shares.
+ *   as another user, so it's opened up after binding. That makes the socket's
+ *   directory the real boundary: whoever can reach the socket can set the
+ *   perimeter header, and so is "on site". A directory the app makes itself is
+ *   0750. One that already exists, such as a volume shared with the proxy, is left
+ *   exactly as its owner set it.
  */
 
 /** True if something accepts a connection on this path right now. */
@@ -32,7 +35,7 @@ export function socketIsLive(path: string): Promise<boolean> {
 
 /** Get ready to bind `path`: make its directory, clear a stale file, refuse a live one. */
 export async function prepareSocket(path: string): Promise<void> {
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o750 });
   if (!existsSync(path)) return;
   if (!lstatSync(path).isSocket()) {
     throw new Error(`SOCKET_PATH ${path} exists and isn't a socket; refusing to replace it.`);

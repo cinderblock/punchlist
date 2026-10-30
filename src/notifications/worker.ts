@@ -95,7 +95,7 @@ function eventQueues(e: EventRow, watchers: { userId: number; prefs: Notificatio
   for (const userId of newlyAssigned) {
     if (isOwnAction(e, userId) || !getPrefs(userId).assigned) continue;
     const task = taskAs(userId, e.task_id);
-    if (task) enqueue({ userId, kind: "assigned", key: `${e.id}`, title: `Assigned to you: ${task.title}`, body: `By ${e.actor_label}`, url: url(task.id), now });
+    if (task) enqueue({ userId, kind: "assigned", key: `${e.id}`, title: `Assigned to you: ${task.title}`, body: `By ${e.actor_label}`, url: url(task.id), now, taskId: task.id });
   }
 
   // A comment on my task.
@@ -105,7 +105,7 @@ function eventQueues(e: EventRow, watchers: { userId: number; prefs: Notificatio
     for (const userId of new Set([...assignees, ...(owner != null ? [owner] : [])])) {
       if (isOwnAction(e, userId) || !getPrefs(userId).comments) continue;
       const task = taskAs(userId, e.task_id);
-      if (task) enqueue({ userId, kind: "comment", key: `${e.id}`, title: `${e.actor_label} on ${task.title}`, body: payload.body ?? "", url: url(task.id), now });
+      if (task) enqueue({ userId, kind: "comment", key: `${e.id}`, title: `${e.actor_label} on ${task.title}`, body: payload.body ?? "", url: url(task.id), now, taskId: task.id });
     }
   }
 
@@ -119,7 +119,7 @@ function eventQueues(e: EventRow, watchers: { userId: number; prefs: Notificatio
       const label = task.labels.find((l) => prefs.watch.labels.includes(l.id))?.name;
       const zone = task.location?.zoneId && prefs.watch.zones.includes(task.location.zoneId) ? task.location.zoneName : null;
       if (label || zone) {
-        enqueue({ userId, kind: "watch", key: task.id, title: `New in ${label ?? zone}: ${task.title}`, body: `Added by ${task.createdBy}`, url: url(task.id), now });
+        enqueue({ userId, kind: "watch", key: task.id, title: `New in ${label ?? zone}: ${task.title}`, body: `Added by ${task.createdBy}`, url: url(task.id), now, taskId: task.id });
       }
     }
   }
@@ -150,6 +150,33 @@ function myTasks(userId: number): TaskView[] {
   return [...assigned, ...owned];
 }
 
+/** The digest's words, from what this person can see right now. Null when nothing is overdue. */
+function overdueDigest(userId: number, today: string): { title: string; body: string } | null {
+  const overdue = myTasks(userId).filter((t) => t.dueDate && t.dueDate < today);
+  if (overdue.length === 0) return null;
+  const titles = overdue.slice(0, 3).map((t) => t.title).join(", ");
+  const more = overdue.length > 3 ? `, and ${overdue.length - 3} more` : "";
+  return { title: overdue.length === 1 ? "1 overdue task" : `${overdue.length} overdue tasks`, body: `${titles}${more}` };
+}
+
+/**
+ * What a queued notification should say now, or null if it shouldn't go. It may
+ * have waited hours for quiet hours to end, and the task may have gone private,
+ * been reassigned or been deleted since. What was true when it was queued proves
+ * nothing, so it's read again, as the person.
+ */
+function stillTrue(n: Queued, now: number, timeZone: string): Queued | null {
+  if (n.kind === "overdue") {
+    const digest = overdueDigest(n.userId, dateOf(now, timeZone));
+    return digest ? { ...n, ...digest } : null;
+  }
+  if (!n.taskId) return n;
+  const task = taskAs(n.userId, n.taskId);
+  if (!task) return null;
+  if (n.kind === "due_soon" && task.status === "done") return null;
+  return n;
+}
+
 /** The daily ones, once their time of day has passed. */
 export function decideFromCalendar(userId: number, prefs: NotificationPrefs, now: number, timeZone: string): void {
   const today = dateOf(now, timeZone);
@@ -160,17 +187,13 @@ export function decideFromCalendar(userId: number, prefs: NotificationPrefs, now
     const until = addDays(today, prefs.dueSoon.days);
     for (const task of mine()) {
       if (!task.dueDate || task.dueDate < today || task.dueDate > until) continue;
-      enqueue({ userId, kind: "due_soon", key: `${task.id}:${task.dueDate}`, title: task.title, body: `Due ${formatDue(task.dueDate, today).toLowerCase()}`, url: url(task.id), now });
+      enqueue({ userId, kind: "due_soon", key: `${task.id}:${task.dueDate}`, title: task.title, body: `Due ${formatDue(task.dueDate, today).toLowerCase()}`, url: url(task.id), now, taskId: task.id });
     }
   }
 
   if (prefs.overdueDigest.on && minute >= clockToMinutes(prefs.overdueDigest.at)) {
-    const overdue = mine().filter((t) => t.dueDate && t.dueDate < today);
-    if (overdue.length > 0) {
-      const titles = overdue.slice(0, 3).map((t) => t.title).join(", ");
-      const more = overdue.length > 3 ? `, and ${overdue.length - 3} more` : "";
-      enqueue({ userId, kind: "overdue", key: today, title: overdue.length === 1 ? "1 overdue task" : `${overdue.length} overdue tasks`, body: `${titles}${more}`, url: "/?mine=1", now });
-    }
+    const digest = overdueDigest(userId, today);
+    if (digest) enqueue({ userId, kind: "overdue", key: today, ...digest, url: "/?mine=1", now });
   }
 }
 
@@ -248,7 +271,12 @@ export async function runNotifications(args: { sender: PushSender; now?: number;
         markSent(n.id, 0, now);
         continue;
       }
-      await sendOne(n, args.sender, now);
+      const fresh = stillTrue(n, now, timeZone);
+      if (!fresh) {
+        markSent(n.id, 0, now);
+        continue;
+      }
+      await sendOne(fresh, args.sender, now);
       sent++;
     }
   }

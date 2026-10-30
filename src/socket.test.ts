@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type Server, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +61,26 @@ describe("preparing a socket path", () => {
     expect(await socketIsLive(path)).toBe(false);
     await prepareSocket(path);
     expect(existsSync(path)).toBe(false);
+  });
+
+  unixOnly("finding 15: a directory the app makes is 0750", async () => {
+    const previous = process.umask(0o022);
+    await prepareSocket(path);
+    process.umask(previous);
+    expect(statSync(join(dir, "run")).mode & 0o777).toBe(0o750);
+  });
+
+  unixOnly("finding 15: a shared directory that already exists is left as it is, and the socket stays connectable", async () => {
+    const shared = join(dir, "shared");
+    mkdirSync(shared);
+    chmodSync(shared, 0o770);
+    const inShared = join(shared, "app.sock");
+    await prepareSocket(inShared);
+    expect(statSync(shared).mode & 0o777).toBe(0o770);
+    server = await listen(inShared);
+    openSocket(inShared);
+    expect(statSync(inShared).mode & 0o777).toBe(0o666);
+    expect(await socketIsLive(inShared)).toBe(true);
   });
 
   unixOnly("after binding, other users can connect", async () => {

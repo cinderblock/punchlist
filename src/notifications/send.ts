@@ -51,9 +51,11 @@ export function webPushSender(): PushSender {
         // 404/410: the browser unsubscribed, or the subscription expired. It
         // will never work again; forget it.
         const gone = status === 404 || status === 410;
+        // The detail goes to the log. What's kept and shown is only the status: a
+        // response body is whatever that host chose to say.
         const body = (err as { body?: string }).body;
-        const error = `${status ? `${status} ` : ""}${body || (err instanceof Error ? err.message : String(err))}`.trim();
-        return { ok: false, gone, error };
+        console.warn("[notify] send failed:", status ?? "", body || (err instanceof Error ? err.message : String(err)));
+        return { ok: false, gone, error: status ? `The push service answered ${status}.` : "The push service couldn't be reached." };
       }
     },
   };

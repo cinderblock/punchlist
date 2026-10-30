@@ -65,7 +65,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     "push-test": async (form) => {
       if (!pushConfigured()) return { ok: false, error: "This server has no VAPID key." };
       const result = await sendTest({ userId: user.id, sender: appSender(), endpoint: stringField(form, "endpoint") || undefined });
-      return result.delivered > 0 ? { ok: true, message: "Sent. It should arrive in a moment." } : { ok: false, error: result.errors[0] ?? "No device took it." };
+      return result.delivered > 0 ? { ok: true, message: "Sent. It should arrive in a moment." } : { ok: false, error: "That didn't reach this device." };
     },
     prefs: (form) => {
       setPrefs(user.id, JSON.parse(stringField(form, "prefs")));
