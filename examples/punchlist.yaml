@@ -1,0 +1,86 @@
+# An example deployment file, for an invented workshop. Copy it, change it, and
+# point CONFIG_FILE at the copy. Every key is optional; the README has the full
+# reference. Secrets don't go here: `tokenEnv` names an environment variable.
+
+name: Maple Street Workshop
+shortName: Workshop
+themeColor: "#2f9e44"
+timezone: America/Chicago
+
+# What an anonymous on-site browser is called in lists and history.
+onSiteLabel: Workshop device
+
+# A logo, as inline SVG. Served as an image, so scripts in it don't run.
+# logoSvg: |
+#   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+
+# Zones with no map behind them. A space with no map just uses these.
+zones:
+  - id: yard
+    name: Yard
+
+# Seeded once. After that, admins edit labels in the app.
+labels:
+  - name: maintenance
+    color: "#e8590c"
+  - name: safety
+    color: "#e03131"
+  - name: supplies
+    color: "#1971c2"
+  - name: cleaning
+
+maps:
+  - id: shop
+    name: Shop floor
+    units: ft
+    # y grows north from the south wall, as surveyed.
+    yAxis: up
+    outline:
+      - [0, 0]
+      - [80, 0]
+      - [80, 50]
+      - [0, 50]
+    zones:
+      - id: wood-shop
+        name: Wood shop
+        polygon:
+          - [0, 0]
+          - [40, 0]
+          - [40, 50]
+          - [0, 50]
+      - id: metal-shop
+        name: Metal shop
+        color: "#1971c2"
+        polygon:
+          - [40, 0]
+          - [80, 0]
+          - [80, 30]
+          - [40, 30]
+      - id: paint-booth
+        name: Paint booth
+        color: "#e8590c"
+        polygon:
+          - [60, 30]
+          - [80, 30]
+          - [80, 50]
+          - [60, 50]
+    places:
+      - id: front-door
+        name: Front door
+        x: 20
+        y: 0
+      - id: dust-collector
+        name: Dust collector
+        x: 5
+        y: 45
+      - id: compressor
+        name: Compressor
+        x: 75
+        y: 5
+
+integrations:
+  # A service that posts to the API under its own name, with its own token.
+  - id: monitor
+    name: Shop monitor
+    tokenEnv: INTEGRATION_MONITOR_TOKEN
+    scopes: [tasks:read, tasks:write, tasks:complete]
