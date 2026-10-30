@@ -1,0 +1,64 @@
+.row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  transition: opacity var(--motion-base) var(--ease-entrance);
+}
+
+.row[data-done] {
+  opacity: 0.55;
+}
+
+.row[data-done] .title {
+  text-decoration: line-through;
+}
+
+/* At least 56px square: gloves, and a phone held in one hand. */
+.check {
+  flex: none;
+  width: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--mantine-color-dimmed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform var(--motion-fast) var(--ease-entrance),
+    background-color var(--motion-fast) var(--ease-entrance);
+}
+
+.check:active .circle {
+  transform: scale(0.88);
+}
+
+.row[data-done] .circle {
+  background: var(--mantine-primary-color-filled);
+  border-color: var(--mantine-primary-color-filled);
+  color: var(--mantine-primary-color-contrast);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 8px 10px 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.people {
+  align-self: center;
+  flex: none;
+  padding-right: 8px;
+}
