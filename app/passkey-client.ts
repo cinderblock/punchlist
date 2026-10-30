@@ -74,10 +74,15 @@ function explain(err: unknown, verb: "create" | "use"): never {
   );
 }
 
-/** Register a passkey. `name` is required when a one-time link creates a new person. */
-export async function registerPasskey(name?: string): Promise<string> {
+/** Add a passkey to the signed-in account, whatever else this browser is holding. */
+export const addOwnPasskey = () => registerPasskey({ intent: "self" });
+
+/** Redeem the one-time link. `name` is required when it creates a new person. */
+export const redeemLink = (name: string | undefined, confirmedSwitch: boolean) => registerPasskey({ intent: "link", name, confirmedSwitch });
+
+async function registerPasskey(body: { intent: "link" | "self"; name?: string; confirmedSwitch?: boolean }): Promise<string> {
   if (!passkeysSupported()) throw new PasskeyError("This browser doesn't support passkeys.");
-  const { options } = await post("/api/passkey/register-options", { name });
+  const { options } = await post("/api/passkey/register-options", body);
   let response;
   try {
     response = await startRegistration({ optionsJSON: options as never });

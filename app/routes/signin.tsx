@@ -9,6 +9,7 @@ import { getAuth } from "../auth.server.ts";
 import { AuthCard } from "../components/auth-card.tsx";
 import { PasskeyError, passkeysSupported, signInWithPasskey } from "../passkey-client.ts";
 import { pageTitle } from "../meta.ts";
+import { clearCopies } from "../offline/copies.ts";
 import type { Route } from "./+types/signin";
 
 export function loader({ request, context }: Route.LoaderArgs) {
@@ -30,6 +31,9 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
   // so the server render and first client render agree.
   const [supported, setSupported] = useState(true);
   useEffect(() => setSupported(passkeysSupported()), []);
+  // A session can end without anyone signing out. Whatever was kept for it is gone
+  // by the time the next person signs in here.
+  useEffect(() => void clearCopies(), []);
 
   async function signIn() {
     setBusy(true);

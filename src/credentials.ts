@@ -190,6 +190,9 @@ export function removeCredential(args: {
         "This is your only passkey — removing it would lock you out. Add another first.",
       );
     }
+    // Removing a passkey is how a lost phone is cut off, so what that passkey signed
+    // in goes with it. Before the delete: the foreign key blanks credential_id.
+    database.query("UPDATE sessions SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL").run(Date.now(), args.id);
     database.query("DELETE FROM credentials WHERE id = ?").run(args.id);
     audit({
       actorUserId: args.actorUserId,

@@ -1,6 +1,7 @@
 import { notifications } from "@mantine/notifications";
 import { useEffect, useSyncExternalStore } from "react";
 
+import { noteIdentity } from "./copies.ts";
 import { type CheckQueue, type QueuedCheck, type SendResult, createCheckQueue } from "./queue.ts";
 
 /** The queue, wired to localStorage and the REST API. One per page. */
@@ -50,6 +51,8 @@ export function checkQueue(): CheckQueue {
     storage: { load, save },
     send,
     onRejected: (item, message) => notifications.show({ color: "red", title: `Couldn't save: ${item.title}`, message, autoClose: false }),
+    onDropped: (count) =>
+      notifications.show({ color: "yellow", message: `${count} check-off${count === 1 ? "" : "s"} made by someone else on this device weren't sent.`, autoClose: false }),
   });
   return queue;
 }
@@ -66,8 +69,10 @@ export function usePendingChecks(): QueuedCheck[] {
 }
 
 /** Keep trying: on reconnect, on coming back to the app, and on a slow timer. */
-export function useQueueFlusher(afterFlush: () => void): void {
+export function useQueueFlusher(identity: string, afterFlush: () => void): void {
   useEffect(() => {
+    noteIdentity(identity);
+    checkQueue().setOwner(identity);
     const flush = () => {
       const q = checkQueue();
       if (q.pending().length === 0) return;
@@ -85,5 +90,5 @@ export function useQueueFlusher(afterFlush: () => void): void {
       window.removeEventListener("online", flush);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [afterFlush]);
+  }, [identity, afterFlush]);
 }

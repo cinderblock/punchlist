@@ -18,7 +18,7 @@ beforeEach(freshDb);
 /** Run a whole link-based enrollment with a fresh software passkey. */
 async function enrollWithLink(token: string, name = "Robin Sample") {
   const authenticator = new SoftAuthenticator(ORIGIN);
-  const { ceremonyId, options } = await startEnrollment({ joinToken: token, currentUser: null, name });
+  const { ceremonyId, options } = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name });
   const result = await finishEnrollment({
     ceremonyId,
     response: authenticator.register(options),
@@ -72,8 +72,8 @@ describe("first-admin bootstrap", () => {
     const b = mintRegistration({ purpose: "bootstrap", createdBy: null });
     const phoneA = new SoftAuthenticator(ORIGIN);
     const phoneB = new SoftAuthenticator(ORIGIN);
-    const startA = await startEnrollment({ joinToken: a.token, currentUser: null, name: "Admin A" });
-    const startB = await startEnrollment({ joinToken: b.token, currentUser: null, name: "Admin B" });
+    const startA = await startEnrollment({ intent: "link", joinToken: a.token, currentUser: null, name: "Admin A" });
+    const startB = await startEnrollment({ intent: "link", joinToken: b.token, currentUser: null, name: "Admin B" });
 
     await finishEnrollment({ ceremonyId: startA.ceremonyId, response: phoneA.register(startA.options), userAgent: UA });
     await expect(
@@ -115,8 +115,8 @@ describe("one-time links", () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
     const tabA = new SoftAuthenticator(ORIGIN);
     const tabB = new SoftAuthenticator(ORIGIN);
-    const startA = await startEnrollment({ joinToken: token, currentUser: null, name: "Tab A" });
-    const startB = await startEnrollment({ joinToken: token, currentUser: null, name: "Tab B" });
+    const startA = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "Tab A" });
+    const startB = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "Tab B" });
 
     await finishEnrollment({ ceremonyId: startA.ceremonyId, response: tabA.register(startA.options), userAgent: UA });
     await expect(
@@ -130,14 +130,14 @@ describe("one-time links", () => {
 
   test("abandoning the passkey prompt does not burn the link", async () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
-    await startEnrollment({ joinToken: token, currentUser: null, name: "Someone" });
+    await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "Someone" });
     // ...the person cancels Face ID; no finish call ever arrives.
     expect(findUsableRegistration(token)).not.toBeNull();
   });
 
   test("a new person must give a name", async () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
-    await expect(startEnrollment({ joinToken: token, currentUser: null, name: "   " })).rejects.toThrow(
+    await expect(startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "   " })).rejects.toThrow(
       /Enter a name/,
     );
   });
@@ -170,6 +170,7 @@ describe("adding a passkey while signed in", () => {
 
     const second = new SoftAuthenticator(ORIGIN);
     const { ceremonyId, options } = await startEnrollment({
+      intent: "self",
       joinToken: null,
       currentUser: result.user,
       name: null,
@@ -185,7 +186,7 @@ describe("adding a passkey while signed in", () => {
   });
 
   test("is refused when neither signed in nor holding a link", async () => {
-    await expect(startEnrollment({ joinToken: null, currentUser: null, name: "x" })).rejects.toThrow(/Sign in first/);
+    await expect(startEnrollment({ intent: "self", joinToken: null, currentUser: null, name: "x" })).rejects.toThrow(/Sign in first/);
   });
 });
 
@@ -193,7 +194,7 @@ describe("ceremonies", () => {
   test("are single-use", async () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
     const authenticator = new SoftAuthenticator(ORIGIN);
-    const { ceremonyId, options } = await startEnrollment({ joinToken: token, currentUser: null, name: "A" });
+    const { ceremonyId, options } = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "A" });
     const response = authenticator.register(options);
     await finishEnrollment({ ceremonyId, response, userAgent: UA });
     await expect(finishEnrollment({ ceremonyId, response, userAgent: UA })).rejects.toThrow(/took too long/);
@@ -202,8 +203,8 @@ describe("ceremonies", () => {
   test("reject a response to a different challenge", async () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
     const authenticator = new SoftAuthenticator(ORIGIN);
-    const first = await startEnrollment({ joinToken: token, currentUser: null, name: "A" });
-    const second = await startEnrollment({ joinToken: token, currentUser: null, name: "A" });
+    const first = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "A" });
+    const second = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "A" });
     // Answer the first challenge, but present it under the second ceremony.
     await expect(
       finishEnrollment({ ceremonyId: second.ceremonyId, response: authenticator.register(first.options), userAgent: UA }),
@@ -213,7 +214,7 @@ describe("ceremonies", () => {
   test("reject a response from the wrong origin", async () => {
     const { token } = mintRegistration({ purpose: "invite", createdBy: null });
     const phishing = new SoftAuthenticator("https://evil.example");
-    const { ceremonyId, options } = await startEnrollment({ joinToken: token, currentUser: null, name: "A" });
+    const { ceremonyId, options } = await startEnrollment({ intent: "link", joinToken: token, currentUser: null, name: "A" });
     await expect(
       finishEnrollment({ ceremonyId, response: phishing.register(options), userAgent: UA }),
     ).rejects.toThrow(/couldn't be verified/);

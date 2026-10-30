@@ -370,6 +370,30 @@ const migrations: Migration[] = [
         ) WITHOUT ROWID;
     `,
   },
+  {
+    name: "002_account_notices",
+    sql: `
+        -- Things done to an account that its owner should hear about. Rows are the
+        -- history: nothing deletes them, and dismissing only sets acknowledged_at.
+        CREATE TABLE account_notices (
+          id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id                     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          kind                        TEXT NOT NULL CHECK (kind IN ('recovery_link','recovery_used')),
+          by_user_id                  INTEGER,
+          by_name                     TEXT NOT NULL,
+          detail                      TEXT,
+          -- The passkey a used link added. No foreign key: this outlives it.
+          credential_id               INTEGER,
+          created_at                  INTEGER NOT NULL,
+          acknowledged_at             INTEGER,
+          acknowledged_credential_id  INTEGER
+        );
+        CREATE INDEX idx_account_notices_user ON account_notices(user_id);
+
+        -- The task a queued notification is about, re-read at send.
+        ALTER TABLE notification_log ADD COLUMN task_id TEXT;
+    `,
+  },
 ];
 
 /**

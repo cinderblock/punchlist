@@ -95,7 +95,7 @@ describe("the on-site tier never reaches further than the anonymous tier", () =>
 
   test("not admin, not enrolment: a passkey needs a link or a session", async () => {
     freshWorld();
-    await expect(startEnrollment({ joinToken: null, currentUser: null, name: "Walk-in" })).rejects.toThrow(/Sign in first/);
+    await expect(startEnrollment({ intent: "self", joinToken: null, currentUser: null, name: "Walk-in" })).rejects.toThrow(/Sign in first/);
     expect((await resolveRequest(tasks(onSite))).user).toBeNull();
     expect((await resolveRequest(tasks(onSite))).session).toBeNull();
   });

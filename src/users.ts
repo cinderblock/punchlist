@@ -147,6 +147,14 @@ export function updateUserAccess(args: { userId: number; role?: Role; active?: b
 
     database.query("UPDATE users SET role = ?, active = ?, updated_at = ? WHERE id = ?").run(role, active ? 1 : 0, Date.now(), user.id);
 
+    // A link carries its maker's standing, so it goes when the standing does.
+    if (losesAdmin || (!active && user.active)) {
+      for (const r of database.query<{ id: number }, [number]>("SELECT id FROM registrations WHERE created_by = ? AND used_at IS NULL AND revoked_at IS NULL").all(user.id)) {
+        database.query("UPDATE registrations SET revoked_at = ? WHERE id = ?").run(Date.now(), r.id);
+        audit({ actorUserId: args.actorUserId, entity: "registration", entityId: r.id, action: "revoke", after: { reason: "maker lost access" } });
+      }
+    }
+
     if (!active && user.active) {
       // A deactivated person must not stay signed in anywhere.
       database.query("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(Date.now(), user.id);

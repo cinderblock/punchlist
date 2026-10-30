@@ -14,6 +14,7 @@ import {
   recordCredentialUse,
 } from "./credentials.ts";
 import { db } from "./db.server.ts";
+import { addNotice } from "./notices.ts";
 import {
   consumeRegistration,
   findUsableRegistration,
@@ -53,6 +54,15 @@ const CEREMONY_LOST = "That took too long, or was started elsewhere. Please try 
 // ---- enrollment (registering a passkey) ------------------------------------------
 
 export async function startEnrollment(args: {
+  /**
+   * What the page means to do, said outright. "self" adds a passkey to the
+   * signed-in account and ignores any link. "link" redeems the link. It's never
+   * worked out from which cookies happen to be there: a link left in a browser
+   * would otherwise hijack Settings' Add a passkey.
+   */
+  intent: "link" | "self";
+  /** The person agreed to leave the signed-in account for the link's. */
+  confirmedSwitch?: boolean;
   /** Token from a one-time link, if the person arrived through one. */
   joinToken: string | null;
   /** The signed-in person, if any (adding a passkey to their own account). */
@@ -60,9 +70,13 @@ export async function startEnrollment(args: {
   /** Display name, required when the link creates a new person. */
   name: unknown;
 }): Promise<{ ceremonyId: string; options: PublicKeyCredentialCreationOptionsJSON }> {
-  if (args.joinToken) {
-    const reg = findUsableRegistration(args.joinToken);
+  if (args.intent === "link") {
+    const reg = args.joinToken ? findUsableRegistration(args.joinToken) : null;
     if (!reg) throw new UserInputError(LINK_UNUSABLE);
+    const isOwnLink = reg.purpose === "add_device" && reg.userId === args.currentUser?.id;
+    if (args.currentUser && !isOwnLink && !args.confirmedSwitch) {
+      throw new UserInputError(`This link is for a different account. Confirm that you want to sign ${args.currentUser.name} out here first.`);
+    }
 
     if (reg.purpose === "add_device") {
       const user = reg.userId == null ? null : getUser(reg.userId);
@@ -199,6 +213,20 @@ export async function finishEnrollment(args: {
         lastUsedAt: signsIn ? now : null,
         now,
       });
+
+      // Someone else's link was used on this account: the owner hears about it.
+      if (registration?.purpose === "add_device" && registration.createdBy !== user.id) {
+        const by = registration.createdBy == null ? null : getUser(registration.createdBy);
+        addNotice({
+          userId: user.id,
+          kind: "recovery_used",
+          byUserId: registration.createdBy,
+          byName: by?.name ?? "Someone with access to the server",
+          detail: credential.nickname,
+          credentialId: credential.id,
+          now,
+        });
+      }
 
       // Arriving through a link signs you in. Adding a passkey while already
       // signed in keeps the session you have.

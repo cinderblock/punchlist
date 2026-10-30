@@ -32,7 +32,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     if (!result.sessionToken) {
       // Added a passkey to the account already signed in here.
-      return Response.json({ ok: true, redirectTo: "/account" }, { headers });
+      return Response.json({ ok: true, redirectTo: "/settings" }, { headers });
     }
 
     // A link signed this browser in as `result.user`. Whatever session the

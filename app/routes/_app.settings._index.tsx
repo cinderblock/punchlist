@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
 
 import { removeCredential, renameCredential } from "../../src/credentials.ts";
+import { acknowledgeNotices, noticeHistory, noticeText } from "../../src/notices.ts";
 import { formatInstant } from "../../src/time.ts";
 import { NAME_MAX_LENGTH } from "../../src/limits.ts";
 import { mintRegistration } from "../../src/registrations.ts";
@@ -17,13 +18,19 @@ import { LinkReveal, type RevealedLink } from "../components/link-reveal.tsx";
 import { SignOutButton } from "../components/sign-out.tsx";
 import { useActionFeedback } from "../components/use-action-feedback.ts";
 import { pageTitle } from "../meta.ts";
-import { PasskeyError, passkeysSupported, registerPasskey } from "../passkey-client.ts";
-import { passkeyViews, sessionViews } from "../views.server.ts";
+import { PasskeyError, addOwnPasskey, passkeysSupported } from "../passkey-client.ts";
+import { passkeyViews, sessionViews, whenText } from "../views.server.ts";
 import type { Route } from "./+types/_app.settings._index";
 
 export function loader({ request, context }: Route.LoaderArgs) {
   const { user, session } = requireUser(context, request);
-  return { name: user.name, role: user.role, passkeys: passkeyViews(user.id), sessions: sessionViews(user.id, session.id) };
+  return {
+    name: user.name,
+    role: user.role,
+    passkeys: passkeyViews(user.id),
+    sessions: sessionViews(user.id, session.id),
+    history: noticeHistory(user.id).map((n) => ({ id: n.id, text: noticeText(n, whenText(n.at)) })),
+  };
 }
 
 export function meta({ matches }: Route.MetaArgs) {
@@ -54,6 +61,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       const n = revokeAllSessions({ ...self, exceptId: session.id });
       return { ok: true, message: `Signed out ${n} other device${n === 1 ? "" : "s"}.` };
     },
+    "ack-notices": () => {
+      acknowledgeNotices({ userId: user.id, credentialId: session.credentialId });
+      return { ok: true };
+    },
     "add-device": () => {
       const { url, registration } = mintRegistration({ purpose: "add_device", userId: user.id, createdBy: user.id });
       return { ok: true, link: { url, label: `Add a device for ${user.name}`, expires: formatInstant(registration.expiresAt, config.timezone) } };
@@ -62,7 +73,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { name, role, passkeys, sessions } = loaderData;
+  const { name, role, passkeys, sessions, history } = loaderData;
   return (
     <Stack gap="xl" maw={640} mx="auto">
       <Stack gap={4}>
@@ -103,6 +114,22 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </Title>
         <SessionList sessions={sessions} action="/settings" revokeLabel="Sign out all other devices" />
       </Stack>
+
+      {history.length > 0 && (
+        <Stack gap="sm" data-testid="account-history">
+          <Title order={2} size="h3">
+            Account history
+          </Title>
+          <Text size="sm" c="dimmed">
+            Recovery links made for this account. These can't be removed.
+          </Text>
+          {history.map((h) => (
+            <Text key={h.id} size="sm">
+              {h.text}
+            </Text>
+          ))}
+        </Stack>
+      )}
 
       <SignOutButton>
         {(signOut) => (
@@ -145,7 +172,7 @@ function AddPasskeyButton() {
     setError(null);
     try {
       if (!passkeysSupported()) throw new PasskeyError("This browser can't create passkeys.");
-      await registerPasskey();
+      await addOwnPasskey();
       notifications.show({ message: "Passkey added.", color: "green" });
       await revalidator.revalidate();
     } catch (err) {

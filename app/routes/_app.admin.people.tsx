@@ -72,8 +72,8 @@ export default function People({ loaderData }: Route.ComponentProps) {
       </Title>
 
       <Alert color="gray">
-        Admins can invite and deactivate people, and manage labels. Being an admin doesn't show anyone's private tasks here. Anyone with access to the server could still read its database, and this page won't
-        pretend otherwise.
+        Admins can invite and deactivate people, and manage labels. Being an admin doesn't show anyone's private tasks here. An admin can still get into an account with a recovery link, which that person is
+        told about, and anyone with access to the server can read its database. This page won't pretend otherwise.
       </Alert>
 
       <Stack gap="xs">

@@ -22,6 +22,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   try {
     const { ceremonyId, options } = await startEnrollment({
+      // The page says which it means. Anything else is the safe one: a link is only
+      // redeemed when a link's page asked to.
+      intent: body.intent === "link" ? "link" : "self",
+      confirmedSwitch: body.confirmedSwitch === true,
       joinToken: await readCookie(joinCookie, request),
       currentUser: getAuth(context)?.user ?? null,
       name: body.name,

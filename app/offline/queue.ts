@@ -12,6 +12,8 @@ export type CheckAction = "complete" | "reopen";
 
 export interface QueuedCheck {
   id: string;
+  /** Who tapped. It's only ever sent as them. */
+  owner: string;
   taskId: string;
   action: CheckAction;
   title: string;
@@ -34,7 +36,9 @@ export interface QueueStorage {
 }
 
 export interface CheckQueue {
-  add(item: QueuedCheck): void;
+  add(item: Omit<QueuedCheck, "owner">): void;
+  /** Who's here now. Anything queued by someone else is dropped, never sent as this person. */
+  setOwner(owner: string): void;
   flush(): Promise<void>;
   pending(): QueuedCheck[];
   subscribe(listener: () => void): () => void;
@@ -44,8 +48,10 @@ export function createCheckQueue(args: {
   storage: QueueStorage;
   send: (item: QueuedCheck) => Promise<SendResult>;
   onRejected?: (item: QueuedCheck, message: string) => void;
+  onDropped?: (count: number) => void;
 }): CheckQueue {
   let items = args.storage.load();
+  let owner: string | null = null;
   let flushing = false;
   let again = false;
   const listeners = new Set<() => void>();
@@ -62,12 +68,23 @@ export function createCheckQueue(args: {
      * and an undo that never left the device never happened.
      */
     add(item) {
+      if (owner == null) return;
       const unsent = items.find((i) => i.taskId === item.taskId);
       if (unsent && unsent.action !== item.action && !flushing) commit(items.filter((i) => i !== unsent));
-      else commit([...items, item]);
+      else commit([...items, { ...item, owner }]);
+    },
+
+    setOwner(next) {
+      owner = next;
+      const mine = items.filter((i) => i.owner === next);
+      if (mine.length === items.length) return;
+      const dropped = items.length - mine.length;
+      commit(mine);
+      args.onDropped?.(dropped);
     },
 
     async flush() {
+      if (owner == null) return;
       if (flushing) {
         again = true;
         return;

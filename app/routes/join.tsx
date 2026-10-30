@@ -1,4 +1,4 @@
-import { Alert, Button, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Checkbox, Stack, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
@@ -7,7 +7,7 @@ import { NAME_MAX_LENGTH } from "../../src/limits.ts";
 import { getUser } from "../../src/users.ts";
 import { getAuth, joinCookie, readCookie } from "../auth.server.ts";
 import { AuthCard } from "../components/auth-card.tsx";
-import { PasskeyError, passkeysSupported, registerPasskey } from "../passkey-client.ts";
+import { PasskeyError, passkeysSupported, redeemLink } from "../passkey-client.ts";
 import { pageTitle } from "../meta.ts";
 import type { Route } from "./+types/join";
 
@@ -58,7 +58,9 @@ function JoinForm({ purpose, role, nameHint, targetName, signedInAs, targetIsSig
   const [supported, setSupported] = useState(true);
   useEffect(() => setSupported(passkeysSupported()), []);
 
+  const [confirmed, setConfirmed] = useState(false);
   const needsName = purpose !== "add_device";
+  const switching = signedInAs != null && !targetIsSignedInUser;
   const heading =
     purpose === "bootstrap"
       ? "Set up the first admin"
@@ -71,7 +73,7 @@ function JoinForm({ purpose, role, nameHint, targetName, signedInAs, targetIsSig
     setBusy(true);
     setError(null);
     try {
-      const to = await registerPasskey(needsName ? name : undefined);
+      const to = await redeemLink(needsName ? name : undefined, confirmed);
       // Full page load: the new session cookie must reach every loader, and
       // the join cookie has just been cleared.
       window.location.assign(to);
@@ -95,10 +97,19 @@ function JoinForm({ purpose, role, nameHint, targetName, signedInAs, targetIsSig
           "This adds a passkey on this device, so you can sign in here too. Your existing passkeys keep working."}
       </Text>
 
-      {signedInAs && !targetIsSignedInUser && (
-        <Alert color="yellow">
-          This browser is signed in as {signedInAs.name}. Continuing signs {signedInAs.name} out here and signs in
-          as {needsName ? "the new account" : targetName} instead.
+      {signedInAs && switching && (
+        <Alert color="yellow" title={`You're signed in as ${signedInAs.name}`}>
+          <Stack gap="xs">
+            <Text size="sm">
+              This link is for {needsName ? "a new account" : `${targetName}'s account`}, not yours. If someone sent it to
+              you and you didn't expect it, stop here: a passkey made on this page belongs to that account, not to you.
+            </Text>
+            <Checkbox
+              label={`Sign ${signedInAs.name} out here and continue as ${needsName ? "the new account" : targetName}`}
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.currentTarget.checked)}
+            />
+          </Stack>
         </Alert>
       )}
 
@@ -123,7 +134,7 @@ function JoinForm({ purpose, role, nameHint, targetName, signedInAs, targetIsSig
               data-autofocus
             />
           )}
-          <Button type="submit" size="lg" fullWidth loading={busy} disabled={!supported || (needsName && !name.trim())}>
+          <Button type="submit" size="lg" fullWidth loading={busy} disabled={!supported || (needsName && !name.trim()) || (switching && !confirmed)}>
             Create passkey
           </Button>
           <Text size="sm" c="dimmed">

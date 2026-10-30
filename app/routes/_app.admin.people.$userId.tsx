@@ -58,7 +58,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     },
     recovery: () => {
       const { url, registration } = mintRegistration({ purpose: "add_device", userId: user.id, createdBy: admin.id });
-      return { ok: true, link: { url, label: `Recovery link for ${user.name}`, expires: formatInstant(registration.expiresAt, config.timezone) } };
+      return { ok: true, message: admin.id === user.id ? undefined : `${user.name} has been signed out everywhere, and will be told.`, link: { url, label: `Recovery link for ${user.name}`, expires: formatInstant(registration.expiresAt, config.timezone) } };
     },
     "rename-passkey": (form) => {
       renameCredential({ ...on, id: intField(form, "credentialId"), nickname: stringField(form, "nickname") });
@@ -141,7 +141,7 @@ export default function Person({ loaderData }: Route.ComponentProps) {
           </Button>
         </Group>
         <Text size="sm" c="dimmed">
-          For someone who's lost every device. Opening it lets them add a new passkey to this account.
+          For someone who's lost every device. Opening it adds a new passkey to this account. Making one signs {person.name} out everywhere, and they'll be told who made it and when, permanently.
         </Text>
       </Stack>
 

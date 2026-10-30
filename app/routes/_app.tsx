@@ -1,10 +1,11 @@
 import { Alert, Anchor, AppShell, Avatar, Badge, Burger, Button, Divider, Group, Image, NavLink, ScrollArea, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation, useRevalidator, useRouteLoaderData } from "react-router";
+import { Link, Outlet, useFetcher, useLocation, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { actorLabel } from "../../src/actors.ts";
-import { requireViewer } from "../auth.server.ts";
+import { activeNotices, noticeText } from "../../src/notices.ts";
+import { getAuth, requireViewer } from "../auth.server.ts";
 import { InstallHint } from "../components/install-hint.tsx";
 import { SignOutButton } from "../components/sign-out.tsx";
 import { usePendingChecks, useQueueFlusher } from "../offline/check-queue.ts";
@@ -12,6 +13,7 @@ import { isOfflineError, readCopy, writeCopy } from "../offline/copies.ts";
 import type { loader as rootLoader } from "../root";
 import { api } from "../tasks/api.ts";
 import { useLiveUpdates } from "../tasks/live.ts";
+import { whenText } from "../views.server.ts";
 import type { Route } from "./+types/_app";
 
 /**
@@ -22,9 +24,13 @@ import type { Route } from "./+types/_app";
 export function loader({ request, context }: Route.LoaderArgs) {
   const actor = requireViewer(context, request);
   if (actor.kind === "user") {
-    return { me: { kind: "user" as const, id: actor.userId, name: actor.name, role: actor.role, label: actor.name } };
+    const session = getAuth(context)?.session;
+    return {
+      me: { kind: "user" as const, id: actor.userId, name: actor.name, role: actor.role, label: actor.name },
+      notices: activeNotices(actor.userId, session?.credentialId ?? null).map((n) => ({ id: n.id, text: noticeText(n, whenText(n.at)) })),
+    };
   }
-  return { me: { kind: "visitor" as const, label: actorLabel(actor), deviceName: actor.kind === "lan_device" ? actor.deviceName : null } };
+  return { me: { kind: "visitor" as const, label: actorLabel(actor), deviceName: actor.kind === "lan_device" ? actor.deviceName : null }, notices: [] };
 }
 
 type LoaderData = Awaited<ReturnType<typeof loader>>;
@@ -57,7 +63,7 @@ const initials = (name: string) =>
     .toUpperCase();
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
-  const { me } = loaderData;
+  const { me, notices } = loaderData;
   const root = useRouteLoaderData<typeof rootLoader>("root");
   const [opened, { toggle, close }] = useDisclosure();
   const location = useLocation();
@@ -67,7 +73,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const refresh = useCallback(() => void revalidate.current(), []);
 
   useLiveUpdates(refresh);
-  useQueueFlusher(refresh);
+  useQueueFlusher(me.kind === "user" ? `user:${me.id}` : "visitor", refresh);
   const pending = usePendingChecks();
 
   // Close the phone drawer after navigating, and on the tap itself, because
@@ -150,10 +156,35 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        {notices.length > 0 && <AccountNotices notices={notices} />}
         {me.kind === "user" && <InstallHint />}
         <Outlet context={{ me } satisfies AppContext} />
       </AppShell.Main>
     </AppShell>
+  );
+}
+
+/** Something was done to this account. It stays until it's been read. */
+function AccountNotices({ notices }: { notices: { id: number; text: string }[] }) {
+  const fetcher = useFetcher();
+  return (
+    <Alert color="red" mb="md" title="Your account was accessed" role="alert" data-testid="account-notice">
+      <Stack gap="xs">
+        {notices.map((n) => (
+          <Text key={n.id} size="sm">
+            {n.text}
+          </Text>
+        ))}
+        <Group gap="xs">
+          <Button size="compact-sm" variant="light" color="red" loading={fetcher.state !== "idle"} onClick={() => fetcher.submit({ intent: "ack-notices" }, { method: "post", action: "/settings" })}>
+            I've read this
+          </Button>
+          <Button size="compact-sm" variant="subtle" component={Link} to="/settings">
+            See my passkeys
+          </Button>
+        </Group>
+      </Stack>
+    </Alert>
   );
 }
 

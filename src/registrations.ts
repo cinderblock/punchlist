@@ -2,6 +2,8 @@ import { audit } from "./audit.ts";
 import { config } from "./config.server.ts";
 import { randomToken, sha256Hex } from "./crypto.ts";
 import { db } from "./db.server.ts";
+import { addNotice } from "./notices.ts";
+import { revokeAllSessions } from "./sessions.ts";
 import { type Role, UserInputError, countActiveAdmins, getUser } from "./users.ts";
 
 /**
@@ -109,6 +111,18 @@ export function mintRegistration(args: {
 
   const nameHint = args.nameHint?.trim() ? args.nameHint.trim().slice(0, 80) : null;
   const token = randomToken(32);
+
+  // A link for someone else's account is a way into it, so it can't be quiet: the
+  // owner is signed out at once and told who, at their next sign-in. A person
+  // making their own link for a new device needs none of this.
+  if (args.purpose === "add_device" && args.createdBy !== userId) {
+    const by = args.createdBy == null ? null : getUser(args.createdBy);
+    db().transaction(() => {
+      revokeAllSessions({ userId: userId!, actorUserId: args.createdBy ?? userId!, now });
+      addNotice({ userId: userId!, kind: "recovery_link", byUserId: args.createdBy, byName: by?.name ?? "Someone with access to the server", now });
+    })();
+  }
+
   const row = db()
     .query<
       RegistrationRow,

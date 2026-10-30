@@ -38,17 +38,42 @@ export function readCopy<T>(key: string): T | null {
   }
 }
 
-/** Forget everything kept on this device, in storage and in the worker's page cache. */
-export async function clearDeviceCopies(): Promise<void> {
-  leaving = true;
+async function clearKeys(prefix: string): Promise<void> {
   const store = storage();
   if (store) {
     for (let i = store.length - 1; i >= 0; i--) {
       const key = store.key(i);
-      if (key?.startsWith("pl:")) store.removeItem(key);
+      if (key?.startsWith(prefix)) store.removeItem(key);
     }
   }
   if (typeof caches !== "undefined") await caches.delete("pl-pages").catch(() => {});
+}
+
+/**
+ * Forget the pages kept on this device. For any way a session can end, not just
+ * signing out: expiring, being revoked, or someone else arriving at the sign-in
+ * page. Queued check-offs stay, because they answer to their owner (queue.ts).
+ */
+export const clearCopies = () => clearKeys(PREFIX);
+
+/** Signing out: forget everything, and let no load still in flight put any of it back. */
+export async function clearDeviceCopies(): Promise<void> {
+  leaving = true;
+  await clearKeys("pl:");
+}
+
+const IDENTITY = "pl:identity";
+
+/** Who this device last showed. A change of person means the kept pages aren't theirs. */
+export function noteIdentity(identity: string): void {
+  const store = storage();
+  try {
+    const last = store?.getItem(IDENTITY);
+    if (last && last !== identity) void clearCopies();
+    store?.setItem(IDENTITY, identity);
+  } catch {
+    // Storage blocked: there are no copies to protect.
+  }
 }
 
 /**
