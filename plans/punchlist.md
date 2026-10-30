@@ -10,7 +10,7 @@ The app is generic. A deployment's name, map, zones and integrations come from i
 
 ## Next
 
-- [ ] First real image from CI, which is the first `docker build`
+- [x] First real image from CI, which is the first `docker build`
 - [ ] A real iPhone: passkey, install, push (Chromium only so far)
 - [ ] Sign-in over OAuth for MCP clients that can't send a static token
 - [ ] Kiosk mode, and a "proposed" state for agent-created tasks
