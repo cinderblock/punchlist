@@ -19,8 +19,9 @@ it.
 - **Passkey-only sign-in.** No passwords and no email. The first admin comes from a
   one-time link at first boot. Everyone else gets an invite link or QR code, good
   for 24 hours. A new device syncs a passkey or uses an add-a-device link; someone
-  who has lost everything gets a recovery link from an admin; a locked-out last
-  admin uses the CLI on the host, which is the root of trust.
+  who has lost everything gets a recovery link from an admin, which they're told
+  about at their next sign-in; a locked-out last admin uses the CLI on the host,
+  which is the root of trust.
 
 - **An anonymous tier for people on site, if you want one.** Your reverse proxy
   says which requests are physically on site. Those visitors can view, check off
@@ -29,8 +30,8 @@ it.
 
 - **Public and private tasks.** Public means everyone in the space, and nobody on
   the internet. Private means the owner, plus anyone it's shared with or assigned
-  to. Admins don't get private tasks in the UI or API. They could read the database,
-  and the app says so rather than claiming otherwise.
+  to. Admins don't get private tasks in the UI or API. See [Who you're
+  trusting](#who-youre-trusting) for what that does and doesn't promise.
 
 - **Locations.** Draw your floor plan in the config file, in your own units. Tapping
   the map gives a point, and the app works out the zone from it. Zones are what you
@@ -47,7 +48,8 @@ it.
 
 - **Attachments.** Photos and files on a task, up to 25 MB each. Every read goes
   through the app and inherits the task's visibility. Thumbnails are re-encoded,
-  dropping EXIF.
+  dropping EXIF. Removing an attachment deletes its bytes. Deleting a task is soft, so
+  its row, its history and its attachments' bytes stay on disk.
 
 - **Live updates.** A wall tablet refreshes itself over server-sent events.
 
@@ -139,17 +141,53 @@ For real, you need three things:
 Generate `VAPID_PRIVATE_KEY` once and keep it. A new key silently orphans every
 device that turned notifications on.
 
+### Who you're trusting
+
+**The host is the root of trust.** Anyone with a shell on the host, or the data
+volume, can read the database and mint an admin link with `bun run admin-link`.
+
+**Admins are trusted.** Nothing in the UI shows an admin someone's private tasks, but
+an admin isn't locked out of them either. People lose phones, so an admin can make a
+recovery link for any account, and whoever opens it gets a passkey on that account and
+can see everything its owner can. That takeover is *detectable, not impossible*:
+
+- Making the link signs the owner out everywhere at once.
+- At their next sign-in the owner is told who made it and when, and again if it was
+  used, with the passkey it added.
+- Both stay in the Account history under Settings, and can't be removed.
+- Dismissing the notice on the passkey the link added doesn't dismiss it on the owner's
+  other passkeys.
+
+So pick admins you'd trust with the keys, and tell people to look at what they're shown.
+
 ### Behind a reverse proxy
 
-The app does not look at client addresses or `X-Forwarded-*` at all. It works out
-who someone is from a session cookie, a bearer token, or the perimeter header below,
-and compares `Origin` with `PUBLIC_BASE_URL`. Rate limits are keyed by actor. So a
-unix socket, where a request has no peer address, works exactly like a port.
+The app does not look at `X-Forwarded-*` at all. It works out who someone is from a
+session cookie, a bearer token, or the perimeter header below, and compares `Origin`
+with `PUBLIC_BASE_URL`. Rate limits are keyed by actor. So a unix socket, where a
+request has no peer address, works exactly like a port.
 
-Set `SOCKET_PATH` to listen on a unix socket instead of `PORT`. The socket is made
-connectable by other users, since the proxy usually runs as someone else, so put it
-in a directory only the proxy shares. A stale socket file is removed on start, but
-only if nothing is listening on it.
+The proxy must pass the original `Host` through. Anything but `PUBLIC_BASE_URL`'s host
+gets 421, except `/healthz`, which the container's own health check uses.
+
+Passkey sign-in has no actor to key a limit on. By default every caller shares one
+bucket, so a flood from anywhere can slow sign-in for everyone. If your proxy can give
+the app the client's address, set `TRUSTED_CLIENT_IP_HEADER` to a header it
+**overwrites** on every request, and each address gets its own limit. A header the proxy
+merely passes along is one a client can set, which would let it dodge the limit. Unset,
+the header is ignored. The value only ever picks a rate-limit bucket. No permission
+reads it.
+
+Set `SOCKET_PATH` to listen on a unix socket instead of `PORT`. A stale socket file is
+removed on start, but only if nothing is listening on it. The socket itself is mode
+0666, since the proxy usually runs as someone else.
+
+**The socket's reach is the trust boundary for the perimeter header:** whoever can
+connect to it can claim to be on site. So what limits it is its directory. Use a
+directory or volume that already exists and that only the app and the proxy can get
+into; the app leaves one that exists exactly as it is. A directory the app has to make
+itself is created 0750, which a proxy running as another user can only enter through
+the group.
 
 Live updates need the proxy to flush as it goes: `flush_interval -1` in Caddy, for
 instance.
@@ -163,8 +201,8 @@ is ignored, so a default install fails closed.
 The app can't check any of this for you, and if it's wrong, anyone can read your
 public tasks. It's only sound when:
 
-- **Nothing but the proxy can reach the app.** Use the unix socket. On a TCP port,
-  anything that can connect can set the header.
+- **Nothing but the proxy can reach the app.** Use the unix socket, in a directory
+  nothing else can enter. On a TCP port, anything that can connect can set the header.
 - **The proxy deletes the header on the outside path and overwrites it on the inside
   path**, so a client can never supply it.
 - **"On site" is judged by the network, not by a private address.** VPN peers have
@@ -213,12 +251,14 @@ how to behave here. The server also serves it at `/skill/SKILL.md`.
 | `PORT` | `3000` | |
 | `SOCKET_PATH` | | Listen on this unix socket instead of `PORT` |
 | `TRUSTED_PERIMETER_HEADER` | | The on-site header's name. Unset is no anonymous tier |
+| `TRUSTED_CLIENT_IP_HEADER` | | A header the proxy overwrites with the client's address. Gives sign-in a limit per address. Unset is ignored |
 | `CONFIG_FILE` | `/config/punchlist.yaml` | Missing means defaults and no map |
 | `DATABASE_PATH` | `./data/punchlist.db` | `/data/punchlist.db` in the image |
 | `ATTACHMENTS_DIR` | `attachments` beside the database | |
 | `VAPID_PRIVATE_KEY` | | Turns on Web Push. Keep it forever |
 | `VAPID_SUBJECT` | `PUBLIC_BASE_URL`, when https | A `mailto:` or `https:` contact |
 | `NOTIFY_EVERY_SECONDS` | `60` | How often reminders are checked. `0` turns them off |
+| `PUSH_ENDPOINT_HOSTS` | The major push services | Comma-separated hosts a push subscription may point at, `.example.com` for subdomains. Replaces the list |
 
 The container log prints the resolved settings at startup, secrets aside.
 

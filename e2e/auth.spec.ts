@@ -142,6 +142,50 @@ test("an admin's recovery link gets someone back in", async ({ browser }) => {
   await newPhone.context.close();
 });
 
+test("finding 1: the owner was signed out by that link, and is told who did it at next sign-in", async () => {
+  const { page } = member;
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/signin$/);
+  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+  await expectSignedInAs(page, "Pat Example");
+
+  const notice = page.getByTestId("account-notice");
+  await expect(notice).toContainText("Robin Sample made a recovery link for your account");
+  await expect(notice).toContainText("was used on");
+  await page.getByRole("button", { name: "I've read this" }).click();
+  await expect(notice).toHaveCount(0);
+
+  await page.goto("/settings");
+  await expect(page.getByTestId("account-history")).toContainText("Robin Sample made a recovery link");
+});
+
+test("finding 7: Add a passkey ignores a link left in the browser", async () => {
+  const { page, context } = admin;
+  // A member's own add-a-device link, opened here and never finished.
+  await member.page.goto("/settings");
+  await member.page.getByRole("button", { name: "Link for another device" }).click();
+  const dialog = member.page.getByRole("dialog");
+  const url = (await dialog.locator("pre, code").first().innerText()).trim();
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  await page.goto(url);
+  await expect(page.getByText("You're signed in as Robin Sample")).toBeVisible();
+  const create = page.getByRole("button", { name: "Create passkey" });
+  await expect(create).toBeDisabled();
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Add a passkey on this device" }).click();
+  await expect(page.getByText("This device already has a passkey", { exact: false })).toBeVisible();
+  await expectSignedInAs(page, "Robin Sample");
+  expect((await context.cookies()).some((c) => c.name === "pl_session")).toBe(true);
+
+  // And the link page goes ahead only when asked to.
+  await page.goto("/join");
+  await page.getByLabel(/Sign Robin Sample out here/).check();
+  await expect(create).toBeEnabled();
+});
+
+
 test("deactivating someone signs them out immediately", async () => {
   const { page } = admin;
   await page.goto("/admin/people");

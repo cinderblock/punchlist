@@ -78,6 +78,29 @@ test("a retry can't check something off twice: the client's id is the idempotenc
   expect(events.events.filter((e) => e.type === "completed")).toHaveLength(1);
 });
 
+test("signing out with unsent check-offs warns first, and staying keeps them", async () => {
+  const { page, context } = person;
+  await page.goto("/");
+  await addTask(page, "Not sent yet");
+  await workerReady(page);
+  await page.reload();
+
+  await context.setOffline(true);
+  await page.getByRole("checkbox", { name: "Check off Not sent yet" }).click();
+  await expect(page.getByTestId("queue-badge")).toContainText("1 waiting");
+  let warning = "";
+  page.once("dialog", (d) => {
+    warning = d.message();
+    void d.dismiss();
+  });
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect.poll(() => warning).toContain("1 check-off hasn't reached the server");
+  await expect(page.getByTestId("queue-badge")).toContainText("1 waiting");
+
+  await context.setOffline(false);
+  await expect(page.getByTestId("queue-badge")).toHaveCount(0, { timeout: 25_000 });
+});
+
 test("the last-read list opens with no connection, and the app shell with it", async () => {
   const { page, context } = person;
   await page.goto("/");

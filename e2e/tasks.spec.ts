@@ -211,6 +211,18 @@ test("the audit page is for admins, and doesn't open a side door to private task
   expect(response?.status()).toBe(403);
 });
 
+test("finding 11: a session that simply ends leaves nothing behind for the next person", async () => {
+  const { page, context } = owner;
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("pl:copy:")).length)).toBeGreaterThan(0);
+  const cookies = await context.cookies();
+  await context.clearCookies();
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/signin$/);
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("pl:copy:")).length)).toBe(0);
+  await context.addCookies(cookies);
+});
+
 test("signing out clears what this device kept", async () => {
   const { page } = owner;
   await page.goto("/");

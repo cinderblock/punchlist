@@ -37,7 +37,7 @@ The app is generic. A deployment's name, map, zones and integrations come from i
   drops `.data` and `_routes`.
 - **`request.url` in a loader is the `.data` URL on a client navigation.** Anything
   building a return path from it has to normalise it.
-- **Unix sockets can't be tested on Windows.** Three socket unit tests are skipped
+- **Unix sockets can't be tested on Windows.** Five socket unit tests are skipped
   there. They were run on Linux under WSL, along with the real server on a socket:
   mode `srw-rw-rw-`, `/healthz`, the Dockerfile's HEALTHCHECK command, LAN header
   accepted, a second server refused while the first is live, stale file after
@@ -47,17 +47,19 @@ The app is generic. A deployment's name, map, zones and integrations come from i
   `bun server.ts` directly.
 - **Nothing depends on `req.ip` or `trust proxy`.** `trust proxy` is off. Rate limits
   are keyed by actor; anonymous devices also share a ceiling, since a device id is
-  only a cookie. Passkey ceremonies have no actor, so they share one generous bucket,
-  and the in-memory ceremony store is capped at 10,000 so a flood can't grow it. That
-  bucket could be exhausted deliberately to slow sign-in for everyone; it's a
-  limit worth raising only if that ever happens.
+  only a cookie. Passkey ceremonies have no actor, so they share one generous bucket
+  unless the deployment names `TRUSTED_CLIENT_IP_HEADER`, and the in-memory ceremony
+  store is capped at 10,000 so a flood can't grow it.
 - `Headers` normalises `"lan "` to `"lan"`, as HTTP allows, so trailing whitespace
   on the perimeter value counts as `lan`. `lan, lan` (a header sent twice) doesn't.
 - Mantine 9's `Select` and `MultiSelect` inputs are `role="combobox"`. Their listbox
   shares the label, so `getByLabel` is ambiguous in tests; use the role.
-- `rrule`'s `after()` walks to year 9999 on an impossible rule such as February 30.
-  `between` with an iterator stops at the first hit, so that's what's used, with a
-  ten-year horizon.
+- **`rrule` can't be stopped short of a match.** Its iterator checks limits only on a
+  hit, so `after()`, `between()`, `UNTIL` and `COUNT` all run to the year 9999 on a
+  rule that never matches: `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30` blocked the process for
+  26 seconds. The search is now our own evaluator (`src/recurrence.ts`) with a ten-year
+  horizon and a day budget. A test holds it to the library's answers on 23 rules from
+  3 start dates. The library still words rules for people.
 - WSL here has no Bun, no Docker and no route to GitHub. Docker isn't installed on
   Windows either, so **`docker build` has not been run**. Linux dependencies can be
   fetched from Windows with `bun install --os=linux --cpu=x64`, but the build has to
@@ -66,6 +68,38 @@ The app is generic. A deployment's name, map, zones and integrations come from i
 ## Choices worth knowing
 
 Behaviour that was a judgement call.
+
+- **Admin recovery stays, and can't be quiet.** People lose phones, so an admin can
+  still get into an account. It's detectable, not impossible: making a link for
+  someone else signs them out at once and leaves a permanent notice, enforced in
+  `mintRegistration` so no path skips it. A notice dismissed on the passkey that link
+  added still shows on the owner's other passkeys.
+- **Dedupe refuses rather than guesses.** A key held by a task the actor can no longer
+  edit, or at a different visibility, is a 409 that says nothing about the task. An
+  automation has to pick another key.
+- **Only a person causes a deletion.** Reopening a repeating occurrence normally takes
+  back its unchanged successor. An agent, integration or on-site visitor doesn't: the
+  occurrence reopens out of the series and the successor stays, so nothing is destroyed
+  and the one-open rule still holds. Attachments can only be removed by people too.
+- **A series keeps one recurrence id for life,** through rule changes and stops, because
+  that's what carries visibility and access to its past occurrences. When a series goes
+  or stays private, past occurrences take on the live one's shares and assignees, so
+  whoever was assigned an old one loses sight of it.
+- **A page says what it means to enrol.** Settings sends `self`, the link page sends
+  `link`, and nothing is inferred from which cookies are present. A link for another
+  account does nothing until a checkbox names who gets signed out.
+- **Copies and the check-off queue follow the person.** Kept pages are cleared at the
+  sign-in page and whenever the identity on a device changes. Queued check-offs carry
+  who queued them, and are dropped rather than sent as anyone else. Signing out tries
+  to send them, and warns before discarding any.
+- **Push goes only to known services,** which `PUSH_ENDPOINT_HOSTS` replaces. A failed
+  send keeps its status and logs its body: a body is whatever that host chose to say.
+- **Queued notifications are re-read at send.** A digest is rewritten; anything else
+  about a task the person can no longer see is dropped.
+- **Only the public host is served,** with 421 for anything else, except `/healthz`.
+- **Soft-deleted tasks keep their attachment bytes on disk.** Deleting a task is
+  recoverable by hand, and its files come with it. Removing one attachment deletes
+  its bytes.
 
 - **`via` on an integration comes from config** (`via: ha`, say),
   defaulting to `api`, so no integration has its own code.

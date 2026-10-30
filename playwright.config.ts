@@ -51,6 +51,8 @@ export const e2eEnv = {
   NOTIFY_EVERY_SECONDS: "0",
   // The pretend push service's certificate is self-signed.
   NODE_TLS_REJECT_UNAUTHORIZED: "0",
+  // And it isn't one of the real push services.
+  PUSH_ENDPOINT_HOSTS: "127.0.0.1",
 };
 
 export const PERIMETER_HEADER = "X-Test-Perimeter";
