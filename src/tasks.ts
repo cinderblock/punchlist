@@ -374,13 +374,20 @@ export interface EventView {
 }
 
 export function taskHistory(actor: Actor, id: string): EventView[] {
-  readableRow(actor, id);
+  const seesShares = canManageAccess(actor, accessOf(readableRow(actor, id)));
   return db()
     .query<{ id: number; at: number; actor_label: string; via: string; type: string; payload: string }, [string]>(
       "SELECT id, at, actor_label, via, type, payload FROM task_events WHERE task_id = ? ORDER BY id",
     )
     .all(id)
-    .map((e) => ({ id: e.id, at: e.at, actor: e.actor_label, via: e.via, type: e.type, payload: JSON.parse(e.payload) as Record<string, unknown> }));
+    .map((e) => ({ id: e.id, at: e.at, actor: e.actor_label, via: e.via, type: e.type, payload: visiblePayload(e.payload, seesShares) }));
+}
+
+/** An event's payload, without who a task is shared with unless the reader manages that. */
+function visiblePayload(raw: string, seesShares: boolean): Record<string, unknown> {
+  const payload = JSON.parse(raw) as { changes?: Record<string, unknown> };
+  if (!seesShares && payload.changes) delete payload.changes.sharedWith;
+  return payload;
 }
 
 export interface ActivityView extends EventView {
@@ -406,7 +413,7 @@ export function activity(actor: Actor, limit = 100): ActivityView[] {
       actor: e.actor_label,
       via: e.via,
       type: e.type,
-      payload: JSON.parse(e.payload) as Record<string, unknown>,
+      payload: visiblePayload(e.payload, false),
       taskId: e.task_id,
       taskTitle: e.title,
     }));
@@ -608,9 +615,13 @@ function today(now: number): string {
   return dateOf(now, config.timezone);
 }
 
-/** Store the repeating rule. Returns its row id, and the due date the task should carry. */
-function createRecurrence(input: RecurrenceInput, dueDate: string | null, now: number): { id: string; dueDate: string } {
-  const id = uuidv7(now);
+/**
+ * Store the repeating rule. Returns its row id, and the due date the task should
+ * carry. A series keeps one id for life, through rule changes and stops, because
+ * that id is what ties past occurrences to it when its visibility changes.
+ */
+function saveRecurrence(input: RecurrenceInput, dueDate: string | null, now: number, existingId: string | null): { id: string; dueDate: string } {
+  const id = existingId ?? uuidv7(now);
   const day = today(now);
   if (input.kind === "schedule") {
     const rrule = parseRrule(input.rrule);
@@ -618,10 +629,20 @@ function createRecurrence(input: RecurrenceInput, dueDate: string | null, now: n
     validateSchedule(rrule, anchorDate);
     const first = dueDate ?? firstScheduled(rrule, anchorDate, day);
     if (!first) throw new UserInputError("That repeat rule has no dates left.");
-    db().query("INSERT INTO recurrences (id, kind, rrule, anchor_date, created_at) VALUES (?, 'schedule', ?, ?, ?)").run(id, rrule, anchorDate, now);
+    db()
+      .query(
+        `INSERT INTO recurrences (id, kind, rrule, anchor_date, created_at) VALUES (?, 'schedule', ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET kind = 'schedule', rrule = excluded.rrule, anchor_date = excluded.anchor_date, interval_days = NULL, stopped_at = NULL`,
+      )
+      .run(id, rrule, anchorDate, now);
     return { id, dueDate: first };
   }
-  db().query("INSERT INTO recurrences (id, kind, interval_days, created_at) VALUES (?, 'after_completion', ?, ?)").run(id, input.intervalDays, now);
+  db()
+    .query(
+      `INSERT INTO recurrences (id, kind, interval_days, created_at) VALUES (?, 'after_completion', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET kind = 'after_completion', rrule = NULL, anchor_date = NULL, interval_days = excluded.interval_days, stopped_at = NULL`,
+    )
+    .run(id, input.intervalDays, now);
   return { id, dueDate: dueDate ?? addDays(day, input.intervalDays) };
 }
 
@@ -666,6 +687,13 @@ export function createTask(actor: Actor, input: TaskCreateInput, ctx: WriteConte
         .query<TaskRow, [string, string]>(`${SELECT_TASK} WHERE t.dedupe_scope = ? AND t.dedupe_key = ? AND t.completed_at IS NULL AND t.deleted_at IS NULL`)
         .get(scope, data.dedupeKey);
       if (match) {
+        // A key only ever names a task this actor may change, at the visibility it
+        // asked for. Otherwise a repeat would overwrite a task someone has since made
+        // private, or publish private text onto a public one. The refusal says
+        // nothing about the task.
+        if (!canEdit(actor, accessOf(match)) || match.visibility !== data.visibility) {
+          throw new ConflictError("That dedupe key is held by a task this can't update. Use another key.");
+        }
         db().query("UPDATE tasks SET title = ?, details = ?, updated_at = ?, rev = rev + 1 WHERE id = ?").run(data.title, data.details, now, match.id);
         recordEvent({ taskId: match.id, actor, via, type: "deduped", payload: { key: data.dedupeKey }, now, pending });
         return { task: toView(actor, findRow(match.id)!), deduped: true };
@@ -676,7 +704,7 @@ export function createTask(actor: Actor, input: TaskCreateInput, ctx: WriteConte
     if (data.id && db().query("SELECT 1 FROM tasks WHERE id = ?").get(data.id)) throw new ConflictError("A task with that id already exists.");
 
     const owner = personOf(actor);
-    const recurrence = data.recurrence ? createRecurrence(data.recurrence, data.dueDate ?? null, now) : null;
+    const recurrence = data.recurrence ? saveRecurrence(data.recurrence, data.dueDate ?? null, now, null) : null;
     db()
       .query(
         `INSERT INTO tasks (id, title, details, visibility, owner_user_id, created_by, created_by_label, due_date,
@@ -780,13 +808,13 @@ export function updateTask(actor: Actor, id: string, input: TaskUpdateInput, ctx
     let recurrenceId = row.recurrence_id;
     if (data.recurrence !== undefined) {
       const before = row.r_stopped_at == null ? specOf(row) : null;
-      if (row.recurrence_id) db().query("UPDATE recurrences SET stopped_at = ? WHERE id = ? AND stopped_at IS NULL").run(now, row.recurrence_id);
       if (data.recurrence) {
-        const made = createRecurrence(data.recurrence, dueDate, now);
+        const made = saveRecurrence(data.recurrence, dueDate, now, row.recurrence_id);
         recurrenceId = made.id;
         dueDate = made.dueDate;
-      } else {
-        recurrenceId = null;
+      } else if (row.recurrence_id) {
+        // Stopped, not forgotten: past occurrences still belong to this series.
+        db().query("UPDATE recurrences SET stopped_at = ? WHERE id = ? AND stopped_at IS NULL").run(now, row.recurrence_id);
       }
       note("recurrence", before, data.recurrence);
     }
@@ -820,8 +848,31 @@ export function updateTask(actor: Actor, id: string, input: TaskUpdateInput, ctx
     // Narrowing who can see it may hide it from someone watching.
     const narrowed = changes.visibility !== undefined || changes.sharedWith !== undefined || changes.assignees !== undefined;
     recordEvent({ taskId: id, actor, via, type: "updated", payload: { changes }, now, pending, resync: narrowed });
+    if (recurrenceId && narrowed && (changes.visibility !== undefined || visibility === "private")) {
+      syncSeriesAccess({ taskId: id, recurrenceId, visibility, ownerUserId, actor, via, now, pending });
+    }
     return toView(actor, findRow(id)!);
   });
+}
+
+/**
+ * Past occurrences follow the series. Going private must take the history with it,
+ * or last month's occurrence goes on showing the same title to everyone, and who
+ * can see a private occurrence is whoever can see the live one.
+ */
+function syncSeriesAccess(args: { taskId: string; recurrenceId: string; visibility: "public" | "private"; ownerUserId: number | null; actor: Actor; via: string; now: number; pending: Pending }): void {
+  const { taskId, recurrenceId, visibility, ownerUserId, actor, via, now, pending } = args;
+  const others = db().query<{ id: string }, [string, string]>("SELECT id FROM tasks WHERE recurrence_id = ? AND id <> ?").all(recurrenceId, taskId);
+  for (const { id } of others) {
+    db().query("UPDATE tasks SET visibility = ?, owner_user_id = ?, updated_at = ?, rev = rev + 1 WHERE id = ?").run(visibility, ownerUserId, now, id);
+    if (visibility === "private") {
+      db().query("DELETE FROM task_shares WHERE task_id = ?").run(id);
+      db().query("INSERT INTO task_shares (task_id, user_id) SELECT ?, user_id FROM task_shares WHERE task_id = ?").run(id, taskId);
+      db().query("DELETE FROM task_assignees WHERE task_id = ?").run(id);
+      db().query("INSERT INTO task_assignees (task_id, user_id) SELECT ?, user_id FROM task_assignees WHERE task_id = ?").run(id, taskId);
+    }
+    recordEvent({ taskId: id, actor, via, type: "updated", payload: { series: taskId, visibility }, now, pending, resync: true });
+  }
 }
 
 /** A check-off's time, from a client's queue: never the future, never ancient history. */
@@ -897,15 +948,19 @@ export function reopenTask(actor: Actor, id: string, ctx: WriteContext = {}): Ta
     if (row.completed_at == null) return toView(actor, row);
 
     // Only one occurrence may be open. Undoing a mis-tap should simply work, so
-    // the successor that check-off spawned is taken back, but one that someone
-    // has since changed isn't thrown away for an undo.
+    // for a person the successor that check-off spawned is taken back, unless
+    // someone has since changed it. Only a person may cause a deletion, so anyone
+    // else reopens this one out of the series, and the successor stays.
+    let leavesSeries = false;
     if (row.recurrence_id) {
       const successor = db()
         .query<{ id: string; rev: number }, [string, string]>(
           "SELECT id, rev FROM tasks WHERE recurrence_id = ? AND id <> ? AND completed_at IS NULL AND deleted_at IS NULL",
         )
         .get(row.recurrence_id, id);
-      if (successor) {
+      if (successor && actor.kind !== "user") {
+        leavesSeries = true;
+      } else if (successor) {
         if (successor.rev > 1) throw new ConflictError("The next occurrence has already been changed. Complete or delete it first.");
         db().query("UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, successor.id);
         recordEvent({ taskId: successor.id, actor: SYSTEM, via, type: "superseded", payload: { reopened: id }, now, pending, resync: true });
@@ -918,8 +973,10 @@ export function reopenTask(actor: Actor, id: string, ctx: WriteContext = {}): Ta
       if (clash) throw new ConflictError("A newer open task has the same dedupe key.");
     }
 
-    db().query("UPDATE tasks SET completed_at = NULL, completed_by = NULL, completed_by_label = NULL, updated_at = ?, rev = rev + 1 WHERE id = ?").run(now, id);
-    recordEvent({ taskId: id, actor, via, type: "reopened", now, pending });
+    db()
+      .query("UPDATE tasks SET completed_at = NULL, completed_by = NULL, completed_by_label = NULL, recurrence_id = ?, updated_at = ?, rev = rev + 1 WHERE id = ?")
+      .run(leavesSeries ? null : row.recurrence_id, now, id);
+    recordEvent({ taskId: id, actor, via, type: "reopened", payload: leavesSeries ? { leftSeries: row.recurrence_id } : {}, now, pending });
     return toView(actor, findRow(id)!);
   });
 }
@@ -1017,7 +1074,8 @@ function attachmentView(actor: Actor, a: AttachmentRow, row: TaskRow): Attachmen
 }
 
 function canRemoveAttachment(actor: Actor, a: AttachmentRow, row: TaskRow): boolean {
-  if (actor.kind !== "user") return actorId(actor) === a.actor_id && canAttach(actor, accessOf(row));
+  // Removing destroys bytes, so it's for people, like deleting a task.
+  if (actor.kind !== "user") return false;
   return actorId(actor) === a.actor_id || row.owner_user_id === actor.userId || actor.role === "admin";
 }
 
