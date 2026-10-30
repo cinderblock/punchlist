@@ -9,6 +9,7 @@ import type { User } from "../src/users.ts";
 
 export { ceremonyCookie, clearCookie, deviceCookie, joinCookie, readCookie, sessionCookie } from "../src/http/cookies.ts";
 export { assertSameOrigin, readJson } from "../src/http/guard.ts";
+import { NO_STORE } from "../src/http/guard.ts";
 
 /**
  * HTTP-side auth for the React Router app: the middleware that turns a request
@@ -71,7 +72,9 @@ export function getAuth(context: Ctx): Auth | null {
 
 function toSignIn(request: Request): never {
   const url = new URL(request.url);
-  const next = url.pathname + url.search;
+  // A client-side load arrives as /page.data?_routes=...; come back to the page.
+  url.searchParams.delete("_routes");
+  const next = url.pathname.replace(/\.data$/, "").replace(/^\/_$/, "/") + url.search;
   throw redirect(next === "/" ? "/signin" : `/signin?next=${encodeURIComponent(next)}`);
 }
 
@@ -112,3 +115,34 @@ export function isPost(request: Request): void {
     throw Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: "POST" } });
   }
 }
+
+const DEFAULT_HEADERS: Record<string, string> = {
+  // Anything the app doesn't say otherwise about is private. Task data must never
+  // sit in a shared cache, and a Cloudflare-proxied name caches by extension.
+  "Cache-Control": NO_STORE,
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "same-origin",
+  "Content-Security-Policy": "frame-ancestors 'none'",
+};
+
+/**
+ * Response defaults, for anything a route doesn't set itself. These live here
+ * rather than in server.ts because the Express adapter appends response headers,
+ * so a default set there would be doubled ("private, no-store, public, ...")
+ * rather than replaced.
+ */
+export const defaultHeadersMiddleware: MiddlewareFunction<Response> = async (_args, next) => {
+  const response = await next();
+  const missing = Object.entries(DEFAULT_HEADERS).filter(([name]) => !response.headers.has(name));
+  if (missing.length === 0) return response;
+  try {
+    for (const [name, value] of missing) response.headers.set(name, value);
+    return response;
+  } catch {
+    // Some responses have immutable headers; re-wrap rather than go without.
+    const copy = new Response(response.body, response);
+    for (const [name, value] of missing) copy.headers.set(name, value);
+    return copy;
+  }
+};
+

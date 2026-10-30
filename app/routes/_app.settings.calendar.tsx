@@ -142,13 +142,15 @@ export default function Calendar({ loaderData }: Route.ComponentProps) {
                 ))}
               </Stack>
             )}
-            <Radio.Group name="privateMode" label="My private tasks" description="Calendars are often shared and synced to other services, so these stay out unless you say." value={privateMode} onChange={setPrivateMode}>
+            {scope !== "public" && (
+              <Radio.Group name="privateMode" label="My private tasks" description="Calendars are often shared and synced to other services, so these stay out unless you say." value={privateMode} onChange={setPrivateMode}>
               <Stack gap={6} mt={6}>
                 <Radio value="off" label="Leave them out" />
                 <Radio value="titles" label="Titles only" />
                 <Radio value="full" label="Everything" />
               </Stack>
             </Radio.Group>
+            )}
             <Group>
               <Button type="submit" loading={create.state !== "idle"}>
                 Create feed

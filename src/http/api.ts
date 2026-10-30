@@ -1,4 +1,4 @@
-import { serveAttachment, serveThumb, storeUpload } from "../attachment-store.ts";
+import { deleteUpload, serveAttachment, serveThumb, storeUpload } from "../attachment-store.ts";
 import { type Actor, actorLabel } from "../actors.ts";
 import { site } from "../config.server.ts";
 import { ForbiddenError, UnauthorizedError } from "../errors.ts";
@@ -17,7 +17,6 @@ import {
   listLabels,
   listTasks,
   listZones,
-  removeAttachment,
   reopenTask,
   taskHistory,
   updateTask,
@@ -127,7 +126,7 @@ route("GET", "/api/v1/attachments/:id", ({ actor }, { id }) => serveAttachment(a
 route("GET", "/api/v1/attachments/:id/thumb", ({ actor }, { id }) => serveThumb(actor, id!));
 
 route("DELETE", "/api/v1/attachments/:id", ({ actor, write }, { id }) => {
-  removeAttachment(actor, id!, write);
+  deleteUpload(actor, id!, write);
   return json({ ok: true });
 });
 

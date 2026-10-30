@@ -8,7 +8,7 @@ import type { Actor } from "./actors.ts";
 import { config } from "./config.server.ts";
 import { UserInputError } from "./errors.ts";
 import { ATTACHMENT_MAX_BYTES } from "./limits.ts";
-import { type AttachmentView, type WriteContext, addAttachment, assertCanAttach, readableAttachment } from "./tasks.ts";
+import { type AttachmentView, type WriteContext, addAttachment, assertCanAttach, readableAttachment, removeAttachment } from "./tasks.ts";
 import { uuidv7 } from "./uuid.ts";
 
 /**
@@ -163,4 +163,11 @@ export function serveThumb(actor: Actor, id: string): Response {
   return new Response(Bun.file(storedPath(id, "thumb")).stream(), {
     headers: { ...safetyHeaders(), "Content-Type": "image/webp", "Content-Disposition": "inline" },
   });
+}
+
+/** Removed means removed: the history keeps its name, and the bytes go. */
+export function deleteUpload(actor: Actor, id: string, ctx: WriteContext = {}): void {
+  removeAttachment(actor, id, ctx);
+  rmSync(storedPath(id, "original"), { force: true });
+  rmSync(storedPath(id, "thumb"), { force: true });
 }

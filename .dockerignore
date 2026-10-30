@@ -12,6 +12,7 @@ Thumbs.db
 .vscode
 .idea
 docs
+examples
 # The plan names a deployment; the public image must not carry it.
 plans
 ISSUES.md

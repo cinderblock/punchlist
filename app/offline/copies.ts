@@ -17,7 +17,11 @@ function storage(): Storage | null {
   }
 }
 
+let leaving = false;
+
 export function writeCopy(key: string, value: unknown): void {
+  // Signing out: a load still in flight mustn't put back what was just cleared.
+  if (leaving) return;
   try {
     storage()?.setItem(PREFIX + key, JSON.stringify(value));
   } catch {
@@ -36,6 +40,7 @@ export function readCopy<T>(key: string): T | null {
 
 /** Forget everything kept on this device, in storage and in the worker's page cache. */
 export async function clearDeviceCopies(): Promise<void> {
+  leaving = true;
   const store = storage();
   if (store) {
     for (let i = store.length - 1; i >= 0; i--) {

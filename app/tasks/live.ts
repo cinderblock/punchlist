@@ -20,6 +20,9 @@ export function useLiveUpdates(refresh: () => void): void {
     const source = new EventSource("/api/v1/events");
     source.addEventListener("task", soon);
     source.addEventListener("resync", soon);
+    // Connecting takes a moment, and reconnecting can take a while. Whatever changed
+    // meanwhile was missed, so every open is one refresh.
+    source.addEventListener("open", soon);
     const onVisible = () => {
       if (document.visibilityState === "visible") soon();
     };

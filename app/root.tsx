@@ -17,7 +17,7 @@ import "@mantine/notifications/styles.css";
 import { branding } from "../src/branding.ts";
 import { config } from "../src/config.server.ts";
 import type { Route } from "./+types/root";
-import { authMiddleware } from "./auth.server.ts";
+import { authMiddleware, defaultHeadersMiddleware } from "./auth.server.ts";
 import { MOTION, motionCss } from "./motion.ts";
 import { isOfflineError, readCopy, writeCopy } from "./offline/copies.ts";
 import { startAutoUpdate } from "./pwa/auto-update.ts";
@@ -26,7 +26,7 @@ import { initMiddleware } from "./server-init.ts";
 
 // Order matters: the database must be open before the session is resolved.
 // Middleware (unlike the root loader) also runs for the JSON API routes.
-export const middleware: Route.MiddlewareFunction[] = [initMiddleware, authMiddleware];
+export const middleware: Route.MiddlewareFunction[] = [defaultHeadersMiddleware, initMiddleware, authMiddleware];
 
 /**
  * Branding reaches the client through the root loader rather than being compiled

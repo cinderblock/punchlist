@@ -17,7 +17,7 @@ beforeEach(freshDb);
 
 describe("normalizeName", () => {
   test("trims and collapses whitespace", () => {
-    expect(normalizeName("  Robin   King \n Lovelace ")).toBe("Robin Quincy Sample");
+    expect(normalizeName("  Robin   Quincy \n Sample ")).toBe("Robin Quincy Sample");
   });
 
   test("rejects empty, non-string and overlong names", () => {

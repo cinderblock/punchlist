@@ -77,7 +77,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}:latest
           # A deployment can verify this label against the commit its pin
           # claims, so a mistyped digest can't quietly ship a different build.
-          # 
           build-args: |
             REVISION=${{ github.sha }}
           labels: |

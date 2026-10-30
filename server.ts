@@ -34,13 +34,6 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", false);
 
-app.use((_req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Referrer-Policy", "same-origin");
-  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
-  next();
-});
-
 app.use(
   compression({
     // Event streams and files aren't worth holding back: a compressor buffers
@@ -55,11 +48,19 @@ app.use(
 
 // Hashed build assets are immutable; everything else in build/client (the
 // service worker, icons) may change between builds.
-app.use("/assets", express.static("build/client/assets", { immutable: true, maxAge: "1y" }));
+app.use(
+  "/assets",
+  express.static("build/client/assets", {
+    immutable: true,
+    maxAge: "1y",
+    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+  }),
+);
 app.use(
   express.static("build/client", {
     maxAge: "1h",
     setHeaders(res, filePath) {
+      res.setHeader("X-Content-Type-Options", "nosniff");
       // The worker script decides when every other cached file is replaced, so
       // it must never be answered from a cache.
       if (basename(filePath) === "sw.js") res.setHeader("Cache-Control", "no-cache");
@@ -73,15 +74,6 @@ morgan.token("safe-url", (req) => {
   return url.replace(/^\/feeds\/[^/?]+/, "/feeds/[redacted]").replace(/^\/join\/[^/?]+/, "/join/[redacted]");
 });
 app.use(morgan(":method :safe-url :status :res[content-length] - :response-time ms"));
-
-// Everything past here is the app, and anything it doesn't say otherwise about
-// is treated as private. A route that wants caching sets its own header, which
-// replaces this one. Task data must never sit in a shared cache, and a
-// Cloudflare-proxied name caches by extension.
-app.use((_req, res, next) => {
-  res.setHeader("Cache-Control", "private, no-store");
-  next();
-});
 
 const publicHost = new URL(config.publicBaseUrl).host;
 app.use(createRequestHandler({ build: { ...build, allowedActionOrigins: [publicHost] } }));

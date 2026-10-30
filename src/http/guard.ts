@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { config } from "../config.server.ts";
 import { DomainError, RateLimitedError } from "../errors.ts";
 
-/** Sent on everything that carries task data, and defaulted by server.ts on the rest. */
+/** Sent on everything that carries task data, and the default for the rest (app/auth.server.ts). */
 export const NO_STORE = "private, no-store";
 
 export function json(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}): Response {

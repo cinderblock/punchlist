@@ -38,6 +38,9 @@ export default [
   // The REST API. The UI uses it too.
   route("api/v1/*", "routes/api.v1.ts"),
 
+  // Repairs an installed copy with a stuck service worker.
+  route("api/r", "routes/api.r.ts"),
+
   // Agents.
   route("mcp", "routes/mcp.ts"),
 

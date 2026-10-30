@@ -63,6 +63,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return { ok: true, message: "Removed." };
     },
     "push-test": async (form) => {
+      if (!pushConfigured()) return { ok: false, error: "This server has no VAPID key." };
       const result = await sendTest({ userId: user.id, sender: appSender(), endpoint: stringField(form, "endpoint") || undefined });
       return result.delivered > 0 ? { ok: true, message: "Sent. It should arrive in a moment." } : { ok: false, error: result.errors[0] ?? "No device took it." };
     },
@@ -262,8 +263,11 @@ function PrefsForm({
   const fetcher = useFetcher();
   useActionFeedback(fetcher.data);
   const [p, setP] = useState(prefs);
-  useEffect(() => setP(prefs), [prefs]);
-  const dirty = JSON.stringify(p) !== JSON.stringify(prefs);
+  // By value: a live refresh brings a new object with the same contents, and
+  // mustn't wipe what's being edited.
+  const saved = JSON.stringify(prefs);
+  useEffect(() => setP(JSON.parse(saved) as NotificationPrefs), [saved]);
+  const dirty = JSON.stringify(p) !== saved;
 
   const set = <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K] extends object ? Partial<NotificationPrefs[K]> : NotificationPrefs[K]) =>
     setP((prev) => ({ ...prev, [key]: typeof value === "object" && value !== null ? { ...(prev[key] as object), ...value } : value }));

@@ -76,7 +76,8 @@ export function createFeed(args: { ownerUserId: number; name: string; scope: Fee
   if (!name) throw new UserInputError("Give the feed a name, like Work calendar.");
   if (name.length > FEED_NAME_MAX_LENGTH) throw new UserInputError(`Feed names are limited to ${FEED_NAME_MAX_LENGTH} characters.`);
   if (!SCOPES.includes(args.scope)) throw new UserInputError("Pick what the feed covers.");
-  const privateMode = args.privateMode ?? "off";
+  // "All public tasks" means that: private tasks need a scope that asks for them.
+  const privateMode = args.scope === "public" ? "off" : (args.privateMode ?? "off");
   if (!MODES.includes(privateMode)) throw new UserInputError("Pick how private tasks appear.");
   const labelIds = args.scope === "labels" ? [...new Set(args.labelIds ?? [])] : [];
   if (args.scope === "labels" && labelIds.length === 0) throw new UserInputError("Pick at least one label.");
