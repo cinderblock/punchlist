@@ -3,7 +3,7 @@ import { useState } from "react";
 import { FEEDBACK_MAX_LENGTH } from "../../src/limits.ts";
 import { uuidv7 } from "../../src/uuid.ts";
 import { ApiError, api } from "../tasks/api.ts";
-import { currentContext, recentErrorIds } from "./report.ts";
+import { currentContext, recentErrorIds, reportsSent } from "./report.ts";
 
 type State = "idle" | "sending" | "sent" | "signed-out" | "failed";
 
@@ -17,6 +17,7 @@ export function ErrorNote() {
 
   const send = async () => {
     setState("sending");
+    await reportsSent();
     try {
       await api("/api/v1/feedback", { method: "POST", body: { id: uuidv7(), kind: "bug", body, context: currentContext(), relatedErrors: recentErrorIds() } });
       setState("sent");

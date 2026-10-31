@@ -28,13 +28,14 @@ const MAX_ENTRIES = 30;
 
 export interface Outbox {
   add(entry: OutboxEntry): void;
+  /** Send what can go. While a flush is running, this is that flush. */
   flush(owner: string | null): Promise<void>;
   pending(): OutboxEntry[];
 }
 
 export function createOutbox(args: { load: () => OutboxEntry[]; save: (entries: OutboxEntry[]) => void; send: (entry: OutboxEntry) => Promise<OutboxResult> }): Outbox {
   let entries = args.load();
-  let flushing = false;
+  let running: Promise<void> | null = null;
 
   const commit = (next: OutboxEntry[]) => {
     entries = next;
@@ -46,10 +47,8 @@ export function createOutbox(args: { load: () => OutboxEntry[]; save: (entries: 
       commit([...entries, entry].slice(-MAX_ENTRIES));
     },
 
-    async flush(owner) {
-      if (flushing) return;
-      flushing = true;
-      try {
+    flush(owner) {
+      const pass = async () => {
         for (const entry of entries.filter((e) => e.owner !== owner)) commit(entries.filter((e) => e !== entry));
         for (;;) {
           const entry = entries[0];
@@ -58,9 +57,11 @@ export function createOutbox(args: { load: () => OutboxEntry[]; save: (entries: 
           if (result === "wait") break;
           commit(entries.filter((e) => e !== entry));
         }
-      } finally {
-        flushing = false;
-      }
+      };
+      running ??= pass().finally(() => {
+        running = null;
+      });
+      return running;
     },
 
     pending: () => entries,

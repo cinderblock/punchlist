@@ -8,7 +8,7 @@ import { FEEDBACK_IMAGES_MAX, FEEDBACK_MAX_LENGTH } from "../../src/limits.ts";
 import { uuidv7 } from "../../src/uuid.ts";
 import { readCopy, writeCopy } from "../offline/copies.ts";
 import { ApiError, api, uploadFeedbackImage } from "../tasks/api.ts";
-import { currentContext, queueFeedback, recentErrorIds } from "./report.ts";
+import { currentContext, queueFeedback, recentErrorIds, reportsSent } from "./report.ts";
 
 const DRAFT = "feedback-draft";
 
@@ -48,9 +48,10 @@ export function FeedbackDialog({ opened, onClose, signedIn }: { opened: boolean;
   };
 
   const send = async () => {
-    const note = { id: uuidv7(), kind, body, context: currentContext(), relatedErrors: recentErrorIds() };
     setBusy(true);
     setProblem(null);
+    await reportsSent();
+    const note = { id: uuidv7(), kind, body, context: currentContext(), relatedErrors: recentErrorIds() };
     try {
       await api("/api/v1/feedback", { method: "POST", body: note });
     } catch (err) {

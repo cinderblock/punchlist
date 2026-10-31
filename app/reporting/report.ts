@@ -26,6 +26,7 @@ const STACK_MAX = 8_000;
 const TRAIL_LENGTH = 10;
 /** How recent an error has to be for a note to mention it. */
 const RELATED_MS = 10 * 60_000;
+const REPORTS_WAIT_MS = 2_000;
 
 /** Refusals the app gives on purpose. A 500 is left out because the server already reported it. */
 const QUIET_STATUSES = new Set([0, 401, 403, 404, 409, 413, 429, 500]);
@@ -98,6 +99,15 @@ export function currentContext() {
     colorScheme: document.documentElement.getAttribute("data-mantine-color-scheme") ?? undefined,
     trail: [...trail],
   };
+}
+
+/**
+ * Let reports on their way arrive, so a note written straight after an error can name
+ * it. Bounded: a slow network is no reason to hold up what someone wants to say.
+ */
+export async function reportsSent(): Promise<void> {
+  const sent = outbox?.flush(currentIdentity()).catch(() => {});
+  await Promise.race([sent, new Promise((resolve) => setTimeout(resolve, REPORTS_WAIT_MS))]);
 }
 
 /** Errors the server has from this page in the last few minutes, for a note to point at. */

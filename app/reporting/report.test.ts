@@ -89,6 +89,31 @@ describe("the outbox", () => {
     expect(stored.entries).toEqual([]);
   });
 
+  test("a second flush is the one already running, so it can be waited on", async () => {
+    let finish = (_: OutboxResult) => {};
+    const stored = { entries: [entry("a")] };
+    const sent: string[] = [];
+    const outbox = createOutbox({
+      load: () => stored.entries,
+      save: (entries) => (stored.entries = entries),
+      send: (e) => {
+        sent.push(e.id);
+        return new Promise((resolve) => (finish = resolve));
+      },
+    });
+    const first = outbox.flush("user:1");
+    const second = outbox.flush("user:1");
+    let waited = false;
+    void second.then(() => (waited = true));
+    await Promise.resolve();
+    expect(waited).toBe(false);
+    finish("done");
+    await first;
+    await second;
+    expect(waited).toBe(true);
+    expect(sent).toEqual(["a"]);
+  });
+
   test("a dead network can't fill the device", () => {
     const { outbox, stored } = make(() => "wait");
     for (let i = 0; i < 100; i++) outbox.add(entry(String(i)));
