@@ -1,0 +1,24 @@
+/*
+ * Nothing should zoom the page by accident, and a person should still be able
+ * to on purpose. So the viewport meta stays free of maximum-scale and
+ * user-scalable: pinching is how someone with poor eyesight reads this, and
+ * iOS ignores those for pinching anyway.
+ */
+
+/* A quick second tap on the list shouldn't be a zoom. Pinch and scroll stay. */
+html {
+  touch-action: manipulation;
+}
+
+/*
+ * iOS zooms in on any focused field with text under 16px, and leaves the page
+ * zoomed when it blurs. Mantine's default is 14px. !important because Mantine
+ * sizes fields per component; this has to hold for all of them.
+ */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(1rem, 16px) !important;
+  }
+}

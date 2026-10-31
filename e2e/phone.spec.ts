@@ -42,3 +42,26 @@ test("a tap checks off", async () => {
   await page.getByRole("checkbox", { name: /^Check off/ }).first().tap();
   await expect(page.getByText("Checked off.")).toBeVisible();
 });
+
+test("focusing a field can't zoom the page: none has text under 16px", async () => {
+  const { page } = person;
+  for (const path of ["/", "/tasks/new", "/settings", "/settings/notifications"]) {
+    await page.goto(path);
+    await expect(page.locator("main input:not([type=hidden]), main textarea").first()).toBeVisible();
+    const small = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>("input:not([type=hidden]), textarea, select")]
+        .map((field) => ({ field: field.getAttribute("aria-label") ?? field.id, size: Number.parseFloat(getComputedStyle(field).fontSize) }))
+        .filter((f) => f.size < 16),
+    );
+    expect(small, path).toEqual([]);
+  }
+});
+
+// Declared rather than performed: headless Chromium won't pinch-zoom a page, even
+// through CDP with touch-action off, and already skips double-tap zoom on a phone-width one.
+test("a double tap is off, and nothing stops a pinch", async () => {
+  const { page } = person;
+  await page.goto("/");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute("content", /maximum-scale|user-scalable/);
+});
