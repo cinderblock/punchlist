@@ -69,6 +69,25 @@ export function checkSharedRate(key: string, limit: number, now: number = Date.n
   hit(`shared:${key}`, limit, now);
 }
 
+/** Reports have buckets of their own: an error loop mustn't spend someone's writes. */
+const ERRORS_PER_ACTOR_PER_MINUTE = 60;
+const ERRORS_SIGNED_OUT_PER_ADDRESS_PER_MINUTE = 20;
+const ERRORS_SIGNED_OUT_PER_MINUTE = 120;
+const FEEDBACK_PER_ACTOR_PER_MINUTE = 10;
+const FEEDBACK_LAN_SHARED_PER_MINUTE = 30;
+
+/** A signed-out error report has no actor. `address` is the deployment's trusted one, if it gave any. */
+export function checkErrorReportRate(actor: Actor, address: string | null, now: number = Date.now()): void {
+  if (actor.kind !== "nobody") return hit(`errors:${actorId(actor)}`, ERRORS_PER_ACTOR_PER_MINUTE, now);
+  hit("errors:signed-out", ERRORS_SIGNED_OUT_PER_MINUTE, now);
+  if (address) hit(`errors:signed-out:${address}`, ERRORS_SIGNED_OUT_PER_ADDRESS_PER_MINUTE, now);
+}
+
+export function checkFeedbackRate(actor: Actor, now: number = Date.now()): void {
+  if (actor.kind === "lan_device") hit("feedback:lan", FEEDBACK_LAN_SHARED_PER_MINUTE, now);
+  hit(`feedback:${actorId(actor)}`, FEEDBACK_PER_ACTOR_PER_MINUTE, now);
+}
+
 export function resetRateLimitsForTests(): void {
   buckets().clear();
 }

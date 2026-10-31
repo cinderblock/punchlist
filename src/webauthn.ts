@@ -13,6 +13,7 @@ import {
 import { branding } from "./branding.ts";
 import { config } from "./config.server.ts";
 import { randomToken } from "./crypto.ts";
+import { reportServerError } from "./error-reports.ts";
 import type { Role } from "./users.ts";
 
 /**
@@ -192,6 +193,7 @@ export async function finishRegistration(args: {
     };
   } catch (err) {
     console.error("[webauthn] registration verification failed", rp, err);
+    reportServerError("webauthn", err, { anonymous: true });
     return null;
   }
 }
@@ -225,6 +227,7 @@ export async function finishAuthentication(args: {
     return result.verified ? { newCounter: result.authenticationInfo.newCounter } : null;
   } catch (err) {
     console.error("[webauthn] authentication verification failed", rp, err);
+    reportServerError("webauthn", err, { anonymous: true });
     return null;
   }
 }

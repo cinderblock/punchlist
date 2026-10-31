@@ -34,9 +34,9 @@ export function assertJsonBody(request: Request): void {
 /** Far more than any task needs. Anyone on site can post, so a body has to have a limit. */
 const JSON_MAX_BYTES = 1024 * 1024;
 
-async function readLimited(request: Request): Promise<string> {
+async function readLimited(request: Request, max: number): Promise<string> {
   const tooLarge = () => Response.json({ error: "That's too large." }, { status: 413 });
-  if (Number(request.headers.get("Content-Length") ?? "") > JSON_MAX_BYTES) throw tooLarge();
+  if (Number(request.headers.get("Content-Length") ?? "") > max) throw tooLarge();
   if (!request.body) return "";
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -45,7 +45,7 @@ async function readLimited(request: Request): Promise<string> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > JSON_MAX_BYTES) {
+    if (size > max) {
       await reader.cancel();
       throw tooLarge();
     }
@@ -55,8 +55,8 @@ async function readLimited(request: Request): Promise<string> {
 }
 
 /** Parse a JSON object, answering 400 instead of throwing a 500 on garbage. */
-export async function readJson(request: Request): Promise<Record<string, unknown>> {
-  const text = await readLimited(request);
+export async function readJson(request: Request, max: number = JSON_MAX_BYTES): Promise<Record<string, unknown>> {
+  const text = await readLimited(request, max);
   try {
     const body: unknown = text ? JSON.parse(text) : {};
     if (body && typeof body === "object" && !Array.isArray(body)) return body as Record<string, unknown>;

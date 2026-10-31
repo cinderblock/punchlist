@@ -76,6 +76,15 @@ export function noteIdentity(identity: string): void {
   }
 }
 
+/** Whoever this device last showed, for anything that has to wait on their behalf. */
+export function currentIdentity(): string | null {
+  try {
+    return storage()?.getItem(IDENTITY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Whether an error means "couldn't reach the app" rather than "the app said no".
  * A proxy answering 502/503/504 counts: the box is up, the app isn't.

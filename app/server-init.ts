@@ -4,6 +4,7 @@ import { integrationProblems } from "../src/agents.ts";
 import { ensureBootstrapLink } from "../src/bootstrap.ts";
 import { describeConfig } from "../src/config.server.ts";
 import { initDb } from "../src/db.server.ts";
+import { reportServerError } from "../src/error-reports.ts";
 import { startNotificationWorker } from "../src/notifications/worker.ts";
 import { pruneIdempotency, seedLabels } from "../src/tasks.ts";
 
@@ -31,7 +32,25 @@ export function ensureServerInit(): void {
   pruneIdempotency();
   ensureBootstrapLink();
   startNotificationWorker();
+  watchProcess();
   g[KEY] = true;
+}
+
+/**
+ * What nothing else caught. A stray rejection is one request's problem, so the server
+ * carries on. An uncaught exception leaves the process in a state nobody chose: it's
+ * written down, and then the process goes, for the container to restart.
+ */
+function watchProcess(): void {
+  process.on("unhandledRejection", (reason) => {
+    console.error("[server] unhandled rejection:", reason);
+    reportServerError("rejection", reason);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("[server] uncaught exception:", err);
+    reportServerError("exception", err);
+    process.exit(1);
+  });
 }
 
 export const initMiddleware: MiddlewareFunction<Response> = (_args, next) => {

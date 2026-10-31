@@ -5,6 +5,7 @@
     "": {
       "name": "punchlist",
       "dependencies": {
+        "@jridgewell/trace-mapping": "^0.3.31",
         "@mantine/colors-generator": "^9.6.1",
         "@mantine/core": "^9.0.0",
         "@mantine/hooks": "^9.0.0",

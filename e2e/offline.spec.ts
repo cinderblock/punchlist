@@ -1,7 +1,7 @@
 import { type BrowserContext, type Page, expect, test } from "@playwright/test";
 
 import { e2eEnv } from "../playwright.config.ts";
-import { addTask, newAdmin } from "./helpers.ts";
+import { addTask, newAdmin, workerReady } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -14,16 +14,6 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   await person?.context.close();
 });
-
-/** Wait for the service worker to be in charge, so the app can start with no network. */
-async function workerReady(page: Page) {
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-    if (!navigator.serviceWorker.controller) {
-      await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
-    }
-  });
-}
 
 test("a check-off made offline sticks, waits, and goes when the connection is back", async () => {
   const { page, context } = person;

@@ -67,6 +67,8 @@ The app is generic. A deployment's name, map, zones and integrations come from i
 
 ## Choices worth knowing
 
+Feedback and error reporting has its own notes, in [feedback.md](feedback.md).
+
 Behaviour that was a judgement call.
 
 - **Admin recovery stays, and can't be quiet.** People lose phones, so an admin can

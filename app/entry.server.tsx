@@ -1,6 +1,6 @@
 // React Router 8 replaced the old `AppLoadContext` with `RouterContextProvider`,
 // the same context object the middleware API hands to loaders and actions.
-import type { EntryContext, RouterContextProvider } from "react-router";
+import type { EntryContext, HandleErrorFunction, RouterContextProvider } from "react-router";
 import { ServerRouter } from "react-router";
 // Import the Web Streams build *explicitly* rather than the bare
 // "react-dom/server".
@@ -17,6 +17,9 @@ import { ServerRouter } from "react-router";
 //    stream and adapting it back, for nothing.
 import { renderToReadableStream } from "react-dom/server.browser";
 
+import { actorLabel } from "../src/actors.ts";
+import { reportServerError, worthReporting } from "../src/error-reports.ts";
+import { requestContext } from "./auth.server.ts";
 import { ensureServerInit } from "./server-init.ts";
 
 // The production server imports this module when it starts, so initialising
@@ -26,6 +29,14 @@ import { ensureServerInit } from "./server-init.ts";
 ensureServerInit();
 
 export const streamTimeout = 5_000;
+
+/** Every loader, action and render failure, apart from the ones that aren't. */
+export const handleError: HandleErrorFunction = (error, { request, context }) => {
+  if (!worthReporting(error, request)) return;
+  console.error(error);
+  const actor = context.get(requestContext)?.actor;
+  reportServerError("route", error, { path: new URL(request.url).pathname, actorLabel: actor && actor.kind !== "nobody" ? actorLabel(actor) : undefined });
+};
 
 export default async function handleRequest(
   request: Request,
@@ -45,6 +56,7 @@ export default async function handleRequest(
         // the person holding the phone than a blank page.
         didError = true;
         console.error(error);
+        if (!request.signal.aborted) reportServerError("render", error, { path: new URL(request.url).pathname });
       },
     },
   );

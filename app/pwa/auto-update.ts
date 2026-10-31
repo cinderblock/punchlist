@@ -1,3 +1,4 @@
+import { reportError } from "../reporting/report.ts";
 import { watchUnsavedText } from "./unsaved.ts";
 
 /**
@@ -290,5 +291,6 @@ export function startAutoUpdate(): void {
     })
     .catch((err: unknown) => {
       console.warn("Service worker registration failed", err);
+      reportError("worker", err);
     });
 }

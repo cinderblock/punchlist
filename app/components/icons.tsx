@@ -50,6 +50,14 @@ export const RepeatIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const FeedbackIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="M12 7v4" />
+    <path d="M12 14h.01" />
+  </Svg>
+);
+
 export const ClipIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3l8-8" />

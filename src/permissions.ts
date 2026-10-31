@@ -20,6 +20,8 @@ import { type Actor, type AgentActor, type Scope, type UserActor, actorId } from
  *   * = the owner, plus anyone the task is shared with or assigned to.
  *
  * Admins get no extra reach into private tasks here or anywhere else.
+ *
+ * Reports (feedback and errors) are outside this table: see the end of this file.
  */
 
 /** The facts about a task that decide access. */
@@ -260,3 +262,23 @@ export function taskPermissions(actor: Actor, t: TaskAccess) {
 }
 
 export type TaskPermissions = ReturnType<typeof taskPermissions>;
+
+// ---- reports ---------------------------------------------------------------------------
+
+/** A person or an on-site device. Free text from the open internet would be a spam channel. */
+export function canSendFeedback(actor: Actor): boolean {
+  return actor.kind === "user" || actor.kind === "lan_device";
+}
+
+/** A screenshot is an attachment, and on-site visitors can't attach. */
+export function canAttachToFeedback(actor: Actor): boolean {
+  return actor.kind === "user";
+}
+
+/**
+ * The inbox: admins, and only as themselves. These are reports anyone can write, so an
+ * agent doesn't read them, whoever its owner is.
+ */
+export function canTriageReports(actor: Actor): boolean {
+  return actor.kind === "user" && actor.role === "admin";
+}

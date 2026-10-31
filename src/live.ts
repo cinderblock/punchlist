@@ -1,3 +1,5 @@
+import { reportServerError } from "./error-reports.ts";
+
 /**
  * The in-process bus behind live updates. The domain layer publishes after a
  * transaction commits; the SSE handler subscribes.
@@ -39,6 +41,7 @@ export function publish(event: LiveEvent): void {
       listener(event);
     } catch (err) {
       console.error("[live] listener failed:", err);
+      reportServerError("live", err);
     }
   }
 }

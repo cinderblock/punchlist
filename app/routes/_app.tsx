@@ -1,16 +1,19 @@
-import { Alert, Anchor, AppShell, Avatar, Badge, Burger, Button, Divider, Group, Image, NavLink, ScrollArea, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, AppShell, Avatar, Badge, Burger, Button, Divider, Group, Image, NavLink, ScrollArea, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Outlet, useFetcher, useLocation, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { actorLabel } from "../../src/actors.ts";
+import { countOpenReports } from "../../src/feedback.ts";
 import { activeNotices, noticeText } from "../../src/notices.ts";
 import { getAuth, requireViewer } from "../auth.server.ts";
+import { FeedbackIcon } from "../components/icons.tsx";
 import { InstallHint } from "../components/install-hint.tsx";
 import { SignOutButton } from "../components/sign-out.tsx";
 import { usePendingChecks, useQueueFlusher } from "../offline/check-queue.ts";
 import { isOfflineError, readCopy, writeCopy } from "../offline/copies.ts";
 import type { loader as rootLoader } from "../root";
+import { FeedbackDialog } from "../reporting/FeedbackDialog.tsx";
 import { api } from "../tasks/api.ts";
 import { useLiveUpdates } from "../tasks/live.ts";
 import { whenText } from "../views.server.ts";
@@ -28,9 +31,10 @@ export function loader({ request, context }: Route.LoaderArgs) {
     return {
       me: { kind: "user" as const, id: actor.userId, name: actor.name, role: actor.role, label: actor.name },
       notices: activeNotices(actor.userId, session?.credentialId ?? null).map((n) => ({ id: n.id, text: noticeText(n, whenText(n.at)) })),
+      openReports: actor.role === "admin" ? countOpenReports() : 0,
     };
   }
-  return { me: { kind: "visitor" as const, label: actorLabel(actor), deviceName: actor.kind === "lan_device" ? actor.deviceName : null }, notices: [] };
+  return { me: { kind: "visitor" as const, label: actorLabel(actor), deviceName: actor.kind === "lan_device" ? actor.deviceName : null }, notices: [], openReports: 0 };
 }
 
 type LoaderData = Awaited<ReturnType<typeof loader>>;
@@ -63,9 +67,10 @@ const initials = (name: string) =>
     .toUpperCase();
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
-  const { me, notices } = loaderData;
+  const { me, notices, openReports } = loaderData;
   const root = useRouteLoaderData<typeof rootLoader>("root");
   const [opened, { toggle, close }] = useDisclosure();
+  const [feedbackOpen, feedback] = useDisclosure();
   const location = useLocation();
   const revalidator = useRevalidator();
   const revalidate = useRef(revalidator.revalidate);
@@ -92,10 +97,21 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           { to: "/admin/people", label: "People" },
           { to: "/admin/labels", label: "Labels" },
           { to: "/admin/audit", label: "Audit" },
+          { to: "/admin/feedback", label: "Feedback", count: openReports },
         ]
       : [];
   const isActive = (to: string) => (to === "/" ? location.pathname === "/" || location.pathname.startsWith("/tasks/") : location.pathname === to || location.pathname.startsWith(`${to}/`));
-  const renderLink = (link: { to: string; label: string }) => <NavLink key={link.to} component={Link} to={link.to} label={link.label} active={isActive(link.to)} onClick={close} />;
+  const renderLink = (link: { to: string; label: string; count?: number }) => (
+    <NavLink
+      key={link.to}
+      component={Link}
+      to={link.to}
+      label={link.label}
+      active={isActive(link.to)}
+      onClick={close}
+      rightSection={link.count ? <Badge size="sm" circle={link.count < 10} aria-label={`${link.count} to look at`}>{link.count}</Badge> : undefined}
+    />
+  );
 
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: !opened } }} padding="md">
@@ -114,6 +130,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
                 {pending.length} waiting to send
               </Badge>
             )}
+            <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Send feedback" onClick={feedback.open}>
+              <FeedbackIcon size={20} />
+            </ActionIcon>
             {me.kind === "user" ? (
               <UnstyledButton component={Link} to="/settings" aria-label="Your settings">
                 <Group gap="xs" wrap="nowrap">
@@ -160,6 +179,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         {me.kind === "user" && <InstallHint />}
         <Outlet context={{ me } satisfies AppContext} />
       </AppShell.Main>
+      <FeedbackDialog opened={feedbackOpen} onClose={feedback.close} signedIn={me.kind === "user"} />
     </AppShell>
   );
 }

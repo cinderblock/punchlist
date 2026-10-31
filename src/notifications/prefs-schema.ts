@@ -23,6 +23,8 @@ export const prefsSchema = z.object({
   assigned: z.boolean().catch(true),
   /** Someone commented on a task I own or am assigned to. */
   comments: z.boolean().catch(true),
+  /** Admins: someone sent feedback, or a new error turned up. */
+  reports: z.boolean().catch(true),
   /** My tasks coming due. */
   dueSoon: section({
     on: z.boolean().catch(true),

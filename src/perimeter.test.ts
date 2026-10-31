@@ -79,6 +79,32 @@ describe("with TRUSTED_PERIMETER_HEADER set", () => {
   });
 });
 
+describe("the one thing a signed-out visitor can do", () => {
+  const report = (headers: Record<string, string>) => post("/api/v1/errors", headers, { where: "window", name: "Error", message: "Boom" });
+
+  test("is report an error, from our own pages", async () => {
+    freshWorld({ perimeter: false });
+    expect((await apiFromRequest(report(json))).status).toBe(202);
+  });
+
+  test("not from anywhere else", async () => {
+    freshWorld({ perimeter: false });
+    expect((await apiFromRequest(report({ "Content-Type": "application/json", Origin: "https://evil.example" }))).status).toBe(403);
+    expect((await apiFromRequest(report({ "Content-Type": "text/plain", Origin: ORIGIN }))).status).toBe(415);
+  });
+
+  test("a credential that failed is still 401: it's not a fallback", async () => {
+    freshWorld({ perimeter: false });
+    expect((await apiFromRequest(report({ ...json, Authorization: "Bearer nonsense" }))).status).toBe(401);
+  });
+
+  test("and nothing next to it", async () => {
+    freshWorld({ perimeter: false });
+    expect((await apiFromRequest(post("/api/v1/feedback", json, { kind: "bug", body: "Hello" }))).status).toBe(401);
+    expect((await apiFromRequest(new Request(`${ORIGIN}/api/v1/feedback/images/x`))).status).toBe(401);
+  });
+});
+
 describe("the on-site tier never reaches further than the anonymous tier", () => {
   test("not private tasks", async () => {
     const w = freshWorld();

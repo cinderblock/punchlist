@@ -25,6 +25,7 @@ export default [
       route("people/:userId", "routes/_app.admin.people.$userId.tsx"),
       route("labels", "routes/_app.admin.labels.tsx"),
       route("audit", "routes/_app.admin.audit.tsx"),
+      route("feedback", "routes/_app.admin.feedback.tsx"),
     ]),
   ]),
 

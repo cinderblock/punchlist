@@ -1,6 +1,7 @@
 import { userActor } from "../actors.ts";
 import { config } from "../config.server.ts";
 import { db } from "../db.server.ts";
+import { reportServerError } from "../error-reports.ts";
 import { DomainError } from "../errors.ts";
 import { type TaskView, getTask, listTasks } from "../tasks.ts";
 import { addDays, clockToMinutes, dateOf, formatDue, minutesOfDay } from "../time.ts";
@@ -40,6 +41,7 @@ const TTL_SECONDS: Record<NotificationKind, number> = {
   watch: 24 * 3600,
   due_soon: 12 * 3600,
   overdue: 12 * 3600,
+  report: 24 * 3600,
   test: 300,
 };
 
@@ -327,7 +329,10 @@ export function startNotificationWorker(): void {
       .then((n) => {
         if (n) console.log(`[notify] sent ${n} notification${n === 1 ? "" : "s"}`);
       })
-      .catch((err) => console.error("[notify] pass failed:", err))
+      .catch((err) => {
+        console.error("[notify] pass failed:", err);
+        reportServerError("notify", err);
+      })
       .finally(() => {
         running = false;
         if (again) {

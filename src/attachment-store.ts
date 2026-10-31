@@ -63,10 +63,10 @@ async function makeThumb(bytes: Uint8Array): Promise<{ thumb: Buffer; width: num
 }
 
 /** Read a request's body, stopping at the limit rather than after it. */
-async function readLimited(request: Request): Promise<Uint8Array> {
-  const tooLarge = () => new UserInputError("That file is over the 25 MB limit.");
+export async function readLimited(request: Request, max: number = ATTACHMENT_MAX_BYTES): Promise<Uint8Array> {
+  const tooLarge = () => new UserInputError(`That file is over the ${max / (1024 * 1024)} MB limit.`);
   const declared = Number(request.headers.get("Content-Length") ?? "");
-  if (declared > ATTACHMENT_MAX_BYTES) throw tooLarge();
+  if (declared > max) throw tooLarge();
   if (!request.body) throw new UserInputError("There's no file in that upload.");
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -75,7 +75,7 @@ async function readLimited(request: Request): Promise<Uint8Array> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > ATTACHMENT_MAX_BYTES) {
+    if (size > max) {
       await reader.cancel();
       throw tooLarge();
     }
@@ -133,7 +133,7 @@ function dispositionName(name: string): string {
 }
 
 /** Headers every attachment response gets, inline or not. */
-function safetyHeaders(): Record<string, string> {
+export function safetyHeaders(): Record<string, string> {
   return {
     "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",

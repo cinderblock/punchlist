@@ -5,6 +5,7 @@ import { z } from "zod";
 import { type AgentActor, type IntegrationActor, actorLabel } from "./actors.ts";
 import { authenticateBearer } from "./agents.ts";
 import { config, site } from "./config.server.ts";
+import { reportServerError } from "./error-reports.ts";
 import { DomainError } from "./errors.ts";
 import { errorResponse } from "./http/guard.ts";
 import { DEDUPE_KEY_MAX_LENGTH, DETAILS_MAX_LENGTH, TITLE_MAX_LENGTH } from "./limits.ts";
@@ -55,6 +56,8 @@ function tool(fn: () => unknown): ToolResult {
       const message = err instanceof z.ZodError ? (err.issues[0]?.message ?? "Invalid input.") : err.message;
       return { content: [{ type: "text", text: message }], isError: true };
     }
+    // The SDK answers this for us, so it would never reach the router's error handler.
+    reportServerError("mcp", err);
     throw err;
   }
 }

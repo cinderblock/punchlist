@@ -136,6 +136,24 @@ async function staleWhileRevalidate(event, request) {
   return refresh;
 }
 
+// ---- errors --------------------------------------------------------------------------
+
+// There's no window here to see these. Same endpoint and rules as the page's reporter.
+function reportWorkerError(err) {
+  const e = err instanceof Error ? err : new Error(String(err));
+  if (e.name === "AbortError" || /failed to fetch|load failed|networkerror/i.test(e.message)) return;
+  const context = { path: "/sw.js", revision: BUILD };
+  fetch("/api/v1/errors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ where: "worker", name: e.name, message: e.message.slice(0, 2000), stack: (e.stack || "").slice(0, 8000), context }),
+  }).catch(() => {});
+}
+
+self.addEventListener("error", (event) => reportWorkerError(event.error || event.message));
+self.addEventListener("unhandledrejection", (event) => reportWorkerError(event.reason));
+
 // ---- Web Push ------------------------------------------------------------------------
 
 // A push is Declarative Web Push JSON (src/notifications/worker.ts):

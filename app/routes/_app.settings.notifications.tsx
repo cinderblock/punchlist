@@ -27,6 +27,7 @@ export function loader({ request, context }: Route.LoaderArgs) {
     vapidPublicKey: config.push.vapidPublicKey,
     timeZone: config.timezone,
     prefs: getPrefs(user.id),
+    isAdmin: user.role === "admin",
     labels: listLabels(actor),
     zones: listZones(actor),
     devices: listSubscriptions(user.id).map((s) => ({
@@ -89,7 +90,7 @@ function supportMessage(support: PushSupport): string | null {
 }
 
 export default function Notifications({ loaderData }: Route.ComponentProps) {
-  const { available, vapidPublicKey, prefs, labels, zones, devices, recent, timeZone } = loaderData;
+  const { available, vapidPublicKey, prefs, isAdmin, labels, zones, devices, recent, timeZone } = loaderData;
   return (
     <Stack gap="lg" maw={640} mx="auto">
       <Stack gap={4}>
@@ -103,7 +104,7 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
       {!available && <Alert color="yellow">This server isn't set up to send notifications: it has no VAPID key. Your choices below are kept for when it does.</Alert>}
       {available && vapidPublicKey && <ThisDevice vapidPublicKey={vapidPublicKey} devices={devices} />}
       {devices.length > 0 && <Devices devices={devices} />}
-      <PrefsForm prefs={prefs} labels={labels} zones={zones} timeZone={timeZone} />
+      <PrefsForm prefs={prefs} isAdmin={isAdmin} labels={labels} zones={zones} timeZone={timeZone} />
       {recent.length > 0 && (
         <Stack gap={4}>
           <Title order={2} size="h4">
@@ -251,11 +252,13 @@ function Devices({ devices }: { devices: Device[] }) {
 
 function PrefsForm({
   prefs,
+  isAdmin,
   labels,
   zones,
   timeZone,
 }: {
   prefs: NotificationPrefs;
+  isAdmin: boolean;
   labels: { id: number; name: string }[];
   zones: { id: string; name: string }[];
   timeZone: string;
@@ -277,6 +280,7 @@ function PrefsForm({
       <Stack gap="md">
         <Switch label="Assigned to me" checked={p.assigned} onChange={(e) => set("assigned", e.currentTarget.checked)} />
         <Switch label="Comments on my tasks" checked={p.comments} onChange={(e) => set("comments", e.currentTarget.checked)} />
+        {isAdmin && <Switch label="Feedback and new errors" description="At most one message an hour about errors." checked={p.reports} onChange={(e) => set("reports", e.currentTarget.checked)} />}
 
         <Stack gap={6}>
           <Switch label="My tasks coming due" checked={p.dueSoon.on} onChange={(e) => set("dueSoon", { on: e.currentTarget.checked })} />

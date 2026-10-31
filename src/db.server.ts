@@ -394,6 +394,61 @@ const migrations: Migration[] = [
         ALTER TABLE notification_log ADD COLUMN task_id TEXT;
     `,
   },
+  {
+    name: "003_feedback_and_errors",
+    sql: `
+        -- One row per distinct error, not per occurrence: a loop costs a count.
+        CREATE TABLE error_groups (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          fingerprint       TEXT NOT NULL UNIQUE,
+          source            TEXT NOT NULL,
+          name              TEXT NOT NULL,
+          message           TEXT NOT NULL,
+          stack             TEXT,
+          status            TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','ignored')),
+          -- Anyone could have written this one: it came from a signed-out browser.
+          anonymous         INTEGER NOT NULL DEFAULT 0,
+          count             INTEGER NOT NULL DEFAULT 1,
+          first_at          INTEGER NOT NULL,
+          last_at           INTEGER NOT NULL,
+          first_revision    TEXT,
+          last_revision     TEXT,
+          last_actor_label  TEXT,
+          last_path         TEXT,
+          last_user_agent   TEXT,
+          last_context      TEXT
+        );
+        CREATE INDEX idx_error_groups_status ON error_groups(status, last_at);
+        CREATE INDEX idx_error_groups_anonymous ON error_groups(anonymous, last_at);
+
+        CREATE TABLE feedback (
+          id              TEXT PRIMARY KEY, -- UUIDv7, client-made so a retry can't double it
+          kind            TEXT NOT NULL CHECK (kind IN ('bug','confusing','idea','polish')),
+          body            TEXT NOT NULL,
+          status          TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','planned','done','declined')),
+          actor_id        TEXT NOT NULL,
+          actor_label     TEXT NOT NULL,
+          path            TEXT,
+          user_agent      TEXT,
+          context         TEXT,
+          related_errors  TEXT NOT NULL DEFAULT '[]', -- JSON array of error_groups ids
+          created_at      INTEGER NOT NULL,
+          updated_at      INTEGER NOT NULL
+        );
+        CREATE INDEX idx_feedback_status ON feedback(status, created_at);
+
+        -- Re-encoded on arrival, so these bytes never held EXIF. Stored on disk by id.
+        CREATE TABLE feedback_images (
+          id           TEXT PRIMARY KEY,
+          feedback_id  TEXT NOT NULL REFERENCES feedback(id) ON DELETE CASCADE,
+          size         INTEGER NOT NULL,
+          width        INTEGER,
+          height       INTEGER,
+          created_at   INTEGER NOT NULL
+        );
+        CREATE INDEX idx_feedback_images_feedback ON feedback_images(feedback_id);
+    `,
+  },
 ];
 
 /**

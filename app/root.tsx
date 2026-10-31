@@ -9,7 +9,7 @@ import {
 import { generateColorsMap } from "@mantine/colors-generator";
 import { Notifications } from "@mantine/notifications";
 import { useEffect, useMemo } from "react";
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useRouteError, useRouteLoaderData } from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useRouteError, useRouteLoaderData } from "react-router";
 
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
@@ -23,6 +23,8 @@ import { MOTION, motionCss } from "./motion.ts";
 import { isOfflineError, readCopy, writeCopy } from "./offline/copies.ts";
 import { startAutoUpdate } from "./pwa/auto-update.ts";
 import { UpdateReady } from "./pwa/UpdateReady.tsx";
+import { ErrorNote } from "./reporting/ErrorNote.tsx";
+import { noteVisit } from "./reporting/report.ts";
 import { initMiddleware } from "./server-init.ts";
 
 // Order matters: the database must be open before the session is resolved.
@@ -140,6 +142,9 @@ export default function App({ loaderData }: Route.ComponentProps) {
     [palette, primaryShade],
   );
 
+  const { pathname } = useLocation();
+  useEffect(() => noteVisit(pathname), [pathname]);
+
   useEffect(() => {
     // The worker is what makes the app installable and usable offline, and what
     // replaces itself when a release lands. Not in development: a caching worker
@@ -163,18 +168,23 @@ export function ErrorBoundary() {
   let heading = "Something went wrong";
   // Never surface a raw stack; the server log has it.
   let detail = "The app hit an unexpected error.";
+  let unexpected = false;
   if (isOfflineError(error)) {
     heading = "You're offline";
     detail = "This page needs a connection. The list you last saw is still on the home screen.";
   } else if (isRouteErrorResponse(error)) {
     heading = error.status === 404 ? "Page not found" : error.status === 403 ? "Not allowed" : `Error ${error.status}`;
     detail = typeof error.data === "string" && error.data ? error.data : error.statusText || (error.status === 404 ? "There's nothing at this address." : detail);
+    unexpected = error.status >= 500;
+  } else {
+    unexpected = true;
   }
 
   return (
     <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", maxWidth: "36rem", margin: "0 auto" }}>
       <h1>{heading}</h1>
       <p>{detail}</p>
+      {unexpected && <ErrorNote />}
       <p>
         <a href="/">Back to the app</a>
       </p>

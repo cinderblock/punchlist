@@ -9,10 +9,11 @@
  *   bun scripts/finalize-build.ts          (run by `bun run build`)
  */
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { basename, join, relative, sep } from "node:path";
 
 const CLIENT = "build/client";
+const SOURCE_MAPS = "build/sourcemaps";
 const PLACEHOLDER = "self.__PL_PRECACHE__";
 
 async function walk(dir: string): Promise<string[]> {
@@ -48,4 +49,10 @@ if (!source.includes(PLACEHOLDER)) {
 await writeFile(swPath, source.replace(PLACEHOLDER, JSON.stringify({ buildId, urls: files })));
 
 
-console.log(`Service worker stamped: build ${buildId}, ${files.length} files to keep offline.`);
+// Maps turn a minified stack from a browser back into source (src/source-maps.ts). The
+// server reads them; nothing needs to fetch them.
+const maps = (await walk(CLIENT)).filter((file) => file.endsWith(".map"));
+await mkdir(SOURCE_MAPS, { recursive: true });
+for (const map of maps) await rename(map, join(SOURCE_MAPS, basename(map)));
+
+console.log(`Service worker stamped: build ${buildId}, ${files.length} files to keep offline, ${maps.length} source maps set aside.`);

@@ -34,7 +34,7 @@ export default function Audit({ loaderData }: Route.ComponentProps) {
       <Title order={1} size="h2">
         Audit
       </Title>
-      <Alert color="gray">Accounts, passkeys, agents and feeds. Task history lives on each task, and under Activity.</Alert>
+      <Alert color="gray">Accounts, passkeys, agents, feeds and reports. Task history lives on each task, and under Activity.</Alert>
       {loaderData.rows.length === 0 ? (
         <Text c="dimmed">Nothing yet.</Text>
       ) : (

@@ -63,6 +63,16 @@ export async function newMember(browser: Browser, admin: Page, name: string, opt
   return person;
 }
 
+/** Wait for the service worker to be in charge, so the app can start with no network. */
+export async function workerReady(page: Page) {
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+    }
+  });
+}
+
 export async function addTask(page: Page, title: string) {
   await page.getByLabel("New task").fill(title);
   await page.getByRole("button", { name: "Add task" }).click();

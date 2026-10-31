@@ -73,6 +73,13 @@ it.
   updates the open task rather than adding another, and closing by key handles the
   recovery.
 
+- **Feedback and error reports.** Anyone using the app can tell the admins something's
+  broken, confusing, could be better or looks off, from a button that's on every page,
+  and attach a screenshot if they're signed in. Every error in the browser or on the
+  server reports itself, grouped by what went wrong, with a count, the page, the device,
+  and a stack mapped back to source. Admins get all of it at `/admin/feedback`, and a
+  notification if they want one. A report never includes what was on the screen.
+
 ## Stack
 
 [Bun](https://bun.sh), React Router 8, Mantine 9, raw SQL on `bun:sqlite`,
@@ -159,6 +166,19 @@ can see everything its owner can. That takeover is *detectable, not impossible*:
   other passkeys.
 
 So pick admins you'd trust with the keys, and tell people to look at what they're shown.
+
+**Reports go to admins.** Feedback shows who sent it, the page they were on and their
+device. An error shows the same, and its stack. No report holds what was on the screen, a
+query string, or a token: paths and error text are redacted in the browser and again on
+the server. Screenshots are the exception by choice: someone picks the image, so a
+picture of a private task shows a private task. The dialog says who reads it.
+
+**One thing is open to the internet.** `POST /api/v1/errors` takes reports from signed-out
+browsers, because the sign-in page is where a phone's passkey fails. It needs same-origin
+JSON and has its own rate limit, per address if you set `TRUSTED_CLIENT_IP_HEADER`. These
+reports are capped at 200, oldest evicted, so a flood can only push out its own kind.
+They're marked unverified, never reopen or count toward anything real, and never notify
+anyone. Anything else needs a sign-in, feedback included.
 
 ### Behind a reverse proxy
 
@@ -324,6 +344,10 @@ Everything the UI does goes through this, and through one module behind it
 | `GET`, `POST /api/v1/tasks/:id/attachments` | The `POST` body is the file; `?filename=` names it |
 | `GET /api/v1/labels`, `/zones`, `/maps`, `/people`, `/activity` | |
 | `GET /api/v1/events` | Server-sent events |
+| `POST /api/v1/errors` | For the browser: `where`, `name`, `message`, `stack`, `context`. The only route open without a sign-in |
+| `POST /api/v1/feedback` | `kind` (`bug`, `confusing`, `idea`, `polish`), `body`, optionally `id`, `context`, `relatedErrors`. People and on-site devices, not tokens |
+| `POST /api/v1/feedback/:id/images` | A screenshot for a note just sent. The body is the file |
+| `GET /api/v1/feedback/images/:id` | Admins |
 
 `POST /mcp` is the same again over MCP (stateless Streamable HTTP): `list_tasks`,
 `search_tasks`, `get_task`, `create_task`, `update_task`, `complete_task`,
@@ -336,6 +360,7 @@ app/               React Router: pages, resource routes, the browser's side
   tasks.server.ts  what task pages load, always through src/tasks.ts
   offline/         the check-off queue and last-read copies
   pwa/             service worker registration, push, install detection
+  reporting/       the browser's error reporter, its outbox, and the feedback dialog
 src/
   tasks.ts         the domain layer: every read and write of a task
   permissions.ts   the whole permission model, as pure functions
@@ -346,6 +371,9 @@ src/
   feeds.ts, ics.ts calendar feeds
   attachment-store.ts  bytes on disk, and the headers that make them safe
   notifications/   Web Push: what to send, to whom, and when
+  error-reports.ts errors, grouped; feedback.ts, what people send
+  redact.ts        what must never reach a report
+  source-maps.ts   a minified browser stack back to source
   config-schema.ts the deployment file's schema
 skills/            the skill agents install
 examples/          an example deployment file

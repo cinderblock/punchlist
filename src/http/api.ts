@@ -1,7 +1,9 @@
 import { deleteUpload, serveAttachment, serveThumb, storeUpload } from "../attachment-store.ts";
 import { type Actor, actorLabel } from "../actors.ts";
 import { site } from "../config.server.ts";
+import { ERROR_REPORT_MAX_BYTES, reportClientError } from "../error-reports.ts";
 import { ForbiddenError, UnauthorizedError, UserInputError } from "../errors.ts";
+import { addFeedbackImage, sendFeedback, serveFeedbackImage } from "../feedback.ts";
 import { listFilterSchema } from "../task-schema.ts";
 import {
   addComment,
@@ -22,6 +24,7 @@ import {
   updateTask,
   type WriteContext,
 } from "../tasks.ts";
+import { ceremonyRateKey } from "./ceremony-rate.ts";
 import { eventStream } from "./events.ts";
 import { assertJsonBody, assertSameOrigin, errorResponse, json, readJson } from "./guard.ts";
 import { type ResolvedRequest, reauthenticator, resolveRequest, setDeviceName } from "./resolve-actor.ts";
@@ -31,7 +34,7 @@ import { type ResolvedRequest, reauthenticator, resolveRequest, setDeviceName } 
  * has no private way in. Every route here is a thin call into src/tasks.ts.
  *
  * A signed-out visitor from the internet gets 401 from all of it, without
- * touching the domain.
+ * touching the domain. The one exception is reporting an error.
  */
 
 interface Ctx {
@@ -50,12 +53,14 @@ interface Route {
   keys: string[];
   /** Cookie-authenticated calls need JSON. Uploads are raw bodies, from a signed-in person. */
   rawBody?: boolean;
+  /** Reachable with no credential at all. A credential that failed still gets 401. */
+  signedOut?: boolean;
   handler: Handler;
 }
 
 const routes: Route[] = [];
 
-function route(method: string, path: string, handler: Handler, options: { rawBody?: boolean } = {}): void {
+function route(method: string, path: string, handler: Handler, options: { rawBody?: boolean; signedOut?: boolean } = {}): void {
   const keys: string[] = [];
   const pattern = new RegExp(`^${path.replace(/:(\w+)/g, (_, key: string) => {
     keys.push(key);
@@ -154,6 +159,23 @@ route("GET", "/api/v1/maps", ({ actor }) => {
 
 route("GET", "/api/v1/events", ({ actor, request, resolved }) => eventStream({ request, actor, reauthenticate: reauthenticator(request, resolved) }));
 
+const userAgentOf = (request: Request) => request.headers.get("User-Agent");
+
+// The one thing a signed-out visitor can do. The sign-in page is where a phone's
+// passkey fails, and that person has no session to report with.
+route(
+  "POST",
+  "/api/v1/errors",
+  async ({ actor, request }) => json({ id: reportClientError(actor, ceremonyRateKey(request), await readJson(request, ERROR_REPORT_MAX_BYTES), userAgentOf(request)) }, { status: 202 }),
+  { signedOut: true },
+);
+
+route("POST", "/api/v1/feedback", async ({ actor, request }) => json(sendFeedback(actor, await readJson(request), userAgentOf(request)), { status: 201 }));
+
+route("POST", "/api/v1/feedback/:id/images", async ({ actor, request }, { id }) => json(await addFeedbackImage(actor, id!, request), { status: 201 }), { rawBody: true });
+
+route("GET", "/api/v1/feedback/images/:id", ({ actor }, { id }) => serveFeedbackImage(actor, id!));
+
 route("PATCH", "/api/v1/device", async ({ actor, request }) => {
   if (actor.kind !== "lan_device") throw new ForbiddenError("Only an on-site device has a device name.");
   const body = await readJson(request);
@@ -175,7 +197,7 @@ export async function handleApi(request: Request, resolved: ResolvedRequest): Pr
     }
 
     const { actor, credential } = resolved;
-    if (actor.kind === "nobody") throw new UnauthorizedError();
+    if (actor.kind === "nobody" && !(found.r.signedOut && credential === "none")) throw new UnauthorizedError();
 
     if (mutating(request.method) && credential !== "bearer") {
       // Cookie or network position: ambient authority, so prove this came from our own pages.

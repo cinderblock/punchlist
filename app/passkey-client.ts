@@ -6,6 +6,8 @@ import {
   startRegistration,
 } from "@simplewebauthn/browser";
 
+import { reportError } from "./reporting/report.ts";
+
 /**
  * Browser half of the passkey flows. Each function runs one full ceremony
  * against the API routes and resolves to where the app should go next, or
@@ -67,6 +69,7 @@ function explain(err: unknown, verb: "create" | "use"): never {
     throw new PasskeyError("This device already has a passkey for this account.");
   }
   console.error(err);
+  reportError("passkey", err);
   throw new PasskeyError(
     verb === "create"
       ? "This device couldn't create a passkey. Try a different browser or device."

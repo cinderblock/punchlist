@@ -190,7 +190,7 @@ export function setPrefs(userId: number, value: unknown, now: number = Date.now(
 
 // ---- what is to be sent, and what was -------------------------------------------------
 
-export type NotificationKind = "assigned" | "comment" | "watch" | "due_soon" | "overdue" | "test";
+export type NotificationKind = "assigned" | "comment" | "watch" | "due_soon" | "overdue" | "report" | "test";
 
 export interface Queued {
   id: number;
@@ -227,6 +227,17 @@ export function enqueue(args: { userId: number; kind: NotificationKind; key: str
       .query("INSERT OR IGNORE INTO notification_log (user_id, kind, key, title, body, url, created_at, task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run(args.userId, args.kind, args.key, args.title, args.body, args.url, args.now, args.taskId ?? null).changes > 0
   );
+}
+
+/** Queue a report's notification for every admin who has a device and wants these. Returns whether anyone does. */
+export function enqueueForAdmins(args: { key: string; title: string; body: string; url: string; now: number }): boolean {
+  const admins = peopleWithDevices(args.now).filter(({ userId }) => {
+    const row = db().query<{ role: string }, [number]>("SELECT role FROM users WHERE id = ?").get(userId);
+    return row?.role === "admin" && getPrefs(userId).reports;
+  });
+  let queued = false;
+  for (const { userId } of admins) queued = enqueue({ ...args, userId, kind: "report" }) || queued;
+  return queued;
 }
 
 export function unsent(userId: number): Queued[] {

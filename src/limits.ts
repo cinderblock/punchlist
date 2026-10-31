@@ -20,3 +20,7 @@ export const ATTACHMENTS_MAX_PER_TASK = 50;
 export const TASK_LIST_DEFAULT_LIMIT = 200;
 export const TASK_LIST_MAX_LIMIT = 500;
 export const RECURRENCE_MAX_INTERVAL_DAYS = 3660;
+export const FEEDBACK_MAX_LENGTH = 4_000;
+/** Per screenshot, before it's shrunk. A phone's own screenshot is a fraction of this. */
+export const FEEDBACK_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const FEEDBACK_IMAGES_MAX = 3;

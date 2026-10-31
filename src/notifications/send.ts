@@ -1,6 +1,7 @@
 import webpush from "web-push";
 
 import { config } from "../config.server.ts";
+import { reportServerError } from "../error-reports.ts";
 
 /**
  * Sending one message to one browser. Behind an interface so the tests (and
@@ -55,6 +56,7 @@ export function webPushSender(): PushSender {
         // response body is whatever that host chose to say.
         const body = (err as { body?: string }).body;
         console.warn("[notify] send failed:", status ?? "", body || (err instanceof Error ? err.message : String(err)));
+        if (!gone) reportServerError("push", new Error(status ? `A push service answered ${status}` : "A push service couldn't be reached"));
         return { ok: false, gone, error: status ? `The push service answered ${status}.` : "The push service couldn't be reached." };
       }
     },

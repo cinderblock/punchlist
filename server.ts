@@ -7,6 +7,7 @@ import morgan from "morgan";
 import type { ServerBuild } from "react-router";
 
 import { config } from "./src/config.server.ts";
+import { reportServerError } from "./src/error-reports.ts";
 import { hostAllowed } from "./src/http/host.ts";
 import { openSocket, prepareSocket, removeSocket } from "./src/socket.ts";
 
@@ -87,6 +88,17 @@ morgan.token("safe-url", (req) => {
 app.use(morgan(":method :safe-url :status :res[content-length] - :response-time ms"));
 
 app.use(createRequestHandler({ build: { ...build, allowedActionOrigins: [publicHost] } }));
+
+// Whatever got past React Router. Four arguments is how Express knows this is for errors.
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("[server] request failed:", err);
+  reportServerError("express", err, { path: req.path });
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  res.status(500).type("text/plain").send("Internal error\n");
+});
 
 const onError = (err: unknown) => {
   if (!err) return;

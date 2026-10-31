@@ -1,3 +1,5 @@
+import { reportHttpFailure } from "../reporting/report.ts";
+
 /** The browser's calls to the REST API. Same-origin JSON, as the server requires. */
 
 export class ApiError extends Error {
@@ -26,7 +28,10 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
     throw new ApiError("Can't reach the server. Check your connection and try again.", 0);
   }
   const json = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new ApiError(json.error ?? "Something went wrong. Please try again.", response.status);
+  if (!response.ok) {
+    reportHttpFailure(init.method ?? "GET", path, response.status, json.error);
+    throw new ApiError(json.error ?? "Something went wrong. Please try again.", response.status);
+  }
   return json as T;
 }
 
@@ -64,6 +69,23 @@ export async function uploadAttachment(taskId: string, file: File): Promise<void
   }
   if (!response.ok) {
     const json = (await response.json().catch(() => ({}))) as { error?: string };
+    reportHttpFailure("POST", `/api/v1/tasks/${taskId}/attachments`, response.status, json.error);
+    throw new ApiError(json.error ?? "The upload failed.", response.status);
+  }
+}
+
+/** A screenshot, shrunk on the device like any photo. */
+export async function uploadFeedbackImage(feedbackId: string, file: File): Promise<void> {
+  const body = await downsizePhoto(file);
+  const response = await fetch(`/api/v1/feedback/${feedbackId}/images`, {
+    method: "POST",
+    headers: { "Content-Type": body.type || "application/octet-stream" },
+    body,
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    const json = (await response.json().catch(() => ({}))) as { error?: string };
+    reportHttpFailure("POST", `/api/v1/feedback/${feedbackId}/images`, response.status, json.error);
     throw new ApiError(json.error ?? "The upload failed.", response.status);
   }
 }
