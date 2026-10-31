@@ -73,6 +73,11 @@ export async function workerReady(page: Page) {
   });
 }
 
+/** Wait for the home list's copies to be kept. They're written by its first refresh, not by the load. */
+export async function offlineCopiesKept(page: Page) {
+  await expect.poll(() => page.evaluate(() => ["pl:copy:root", "pl:copy:shell", "pl:copy:list:"].every((key) => localStorage.getItem(key) != null))).toBe(true);
+}
+
 export async function addTask(page: Page, title: string) {
   await page.getByLabel("New task").fill(title);
   await page.getByRole("button", { name: "Add task" }).click();

@@ -83,6 +83,10 @@ Two things reach the people who run a space without anyone having to ask:
   refresh fails, the root error page replaces the app, and whatever was typed goes with
   it. So the dialog keeps its draft on the device, with the pages' own copies, which are
   cleared when the person changes.
+- **Offline copies are written by a page's first refresh, not its load.** For the moment
+  between, even the home list shows "You're offline" if the connection drops, and an open
+  dialog goes with it. That predates this work and the draft covers it. Tests that go
+  offline wait for `offlineCopiesKept`.
 - **`handleError` gets every scanner's 404,** because the router raises those as errors
   itself. Defining it also replaces the default logging. `worthReporting` filters; the
   hook logs for itself.

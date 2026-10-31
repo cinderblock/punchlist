@@ -2,7 +2,7 @@ import { type Browser, type BrowserContext, type Page, expect, test } from "@pla
 import sharp from "sharp";
 
 import { e2eEnv } from "../playwright.config.ts";
-import { contextWithPasskeys, newAdmin, newMember, workerReady } from "./helpers.ts";
+import { contextWithPasskeys, newAdmin, newMember, offlineCopiesKept, workerReady } from "./helpers.ts";
 
 let admin: { context: BrowserContext; page: Page };
 let member: { context: BrowserContext; page: Page };
@@ -144,6 +144,7 @@ test("with no connection, a note waits on the device and goes when it's back", a
   await page.goto("/");
   await workerReady(page);
   await page.reload();
+  await offlineCopiesKept(page);
   await page.getByRole("button", { name: "Send feedback" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("What happened?").fill("Sent from a dead spot in the building");
