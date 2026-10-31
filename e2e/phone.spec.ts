@@ -65,3 +65,24 @@ test("a double tap is off, and nothing stops a pinch", async () => {
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
   await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute("content", /maximum-scale|user-scalable/);
 });
+
+test("feedback fits a phone: nothing zooms, nothing scrolls sideways, and the inbox reads", async () => {
+  const { page } = person;
+  await page.goto("/");
+  await page.getByRole("button", { name: "Send feedback" }).tap();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("What happened?").fill("It doesn't fit my phone");
+  const size = await dialog.getByLabel("What happened?").evaluate((field) => Number.parseFloat(getComputedStyle(field).fontSize));
+  expect(size).toBeGreaterThanOrEqual(16);
+  // Polled: it grows into place as it opens.
+  await expect.poll(async () => (await dialog.boundingBox())?.width).toBe(page.viewportSize()!.width);
+  await dialog.getByRole("button", { name: "Send" }).tap();
+  await expect(page.getByText("Thanks. That's gone to the admins.")).toBeVisible();
+
+  await page.goto("/admin/feedback");
+  const status = page.getByTestId("feedback-note").first().getByLabel("Status");
+  await expect(status).toBeVisible();
+  // A status squeezed by the card beside it reads "Ne".
+  expect((await status.boundingBox())!.width).toBeGreaterThanOrEqual(100);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});

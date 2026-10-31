@@ -103,6 +103,24 @@ test("a failure inside shipped code comes back as source, and the error page tak
   expect(stack).not.toContain("/assets/");
 });
 
+test("the service worker reports its own errors, with what the server needs to accept them", async () => {
+  const { context, page } = member;
+  await page.goto("/");
+  await workerReady(page);
+  const worker = context.serviceWorkers()[0]!;
+  await worker.evaluate(() => {
+    void Promise.reject(new Error("The e2e worker error"));
+  });
+  await inbox("errors");
+  const card = admin.page.getByTestId("error-group").filter({ hasText: "The e2e worker error" });
+  await expect(async () => {
+    await admin.page.reload();
+    await expect(card).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await expect(card).toContainText("client:worker");
+  await expect(card).toContainText("Report Member");
+});
+
 test("an error on the sign-in page is reported by someone with no session, and marked", async ({ browser }) => {
   const { context, page } = await contextWithPasskeys(browser);
   await page.goto("/signin");

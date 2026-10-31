@@ -76,6 +76,8 @@ Two things reach the people who run a space without anyone having to ask:
 - [x] Notifications
 - [x] Tests, README, design notes
 - [x] Full e2e suite, then merge to `master`
+- [x] Deployed
+- [ ] First use of the dialog and inbox on a real iPhone
 
 ## Findings
 
@@ -96,6 +98,23 @@ Two things reach the people who run a space without anyone having to ask:
   "You're offline". It reads the text now, as the reporter does.
 - Vite's `isSsrBuild` is undefined under the React Router build, so the server gets a map
   too. It's harmless, and only the browser's are moved.
+
+- **A note could beat the report of the error before it,** and arrive naming nothing. Sending
+  a note now waits up to 2 seconds for reports on their way.
+
+## Verified
+
+- **A real server failure, by hand.** A production build with a table renamed out from
+  under it: three failing requests, a page and two others, made one `server:route` group
+  with a count of 3, the actor and the version. A scanner's 404 added nothing, and a
+  `?q=` on a failing request wasn't stored. This isn't in the suite, since the suite's
+  servers share their databases between tests.
+- **The service worker's reports are accepted,** `Origin` included: `e2e/feedback.spec.ts`.
+- **The notifier loop is off in e2e,** so a report's push is covered by a unit test
+  through the real send pass, with a fake sender. A push to a real phone hasn't been seen.
+- **A machine on the site's own network is on site.** Smoke-testing a deployment from one
+  isn't testing as a signed-out visitor, and `POST /api/v1/feedback` is accepted. Use an
+  internet path, or only read.
 
 ## Not to do
 

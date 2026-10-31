@@ -13,7 +13,9 @@ import { countOpenErrors, fingerprintOf, listErrorGroups, reportClientError, rep
 import { ConflictError, ForbiddenError, NotFoundError, RateLimitedError, UserInputError } from "./errors.ts";
 import { addFeedbackImage, countOpenReports, deleteFeedback, listFeedback, sendFeedback, serveFeedbackImage, setFeedbackStatus } from "./feedback.ts";
 import { apiFromRequest } from "./http/api.ts";
+import { fakeSender } from "./notifications/send.ts";
 import { addSubscription, setPrefs, unsent } from "./notifications/store.ts";
+import { runNotifications } from "./notifications/worker.ts";
 import { redactPath, redactText } from "./redact.ts";
 import { createSession } from "./sessions.ts";
 import { mapStack } from "./source-maps.ts";
@@ -391,6 +393,24 @@ describe("telling admins", () => {
     reportServerError("webauthn", new Error("Unexpected challenge"), { anonymous: true });
     expect(groups()).toHaveLength(1);
     expect(unsent(w.admin.userId)).toHaveLength(0);
+  });
+});
+
+describe("a report's notification goes out", () => {
+  test("through the real send pass, once, pointing at the inbox", async () => {
+    // Noon in Los Angeles: outside the default quiet hours, which would hold it.
+    const now = Date.UTC(2026, 10, 3, 20);
+    device(w.admin);
+    sendFeedback(w.bob, note(), null, now);
+    const { sender, sent } = fakeSender();
+    await runNotifications({ sender, now, timeZone: "America/Los_Angeles" });
+    expect(sent).toHaveLength(1);
+    const { notification } = sent[0]!.payload as { notification: { title: string; navigate: string } };
+    expect(notification.title).toBe("Something's broken: Bob Member");
+    expect(notification.navigate).toEndWith("/admin/feedback");
+    expect(sent[0]!.options.ttl).toBe(24 * 3600);
+    await runNotifications({ sender, now, timeZone: "America/Los_Angeles" });
+    expect(sent).toHaveLength(1);
   });
 });
 
