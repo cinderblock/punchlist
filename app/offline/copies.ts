@@ -90,9 +90,9 @@ export function currentIdentity(): string | null {
  * A proxy answering 502/503/504 counts: the box is up, the app isn't.
  */
 export function isOfflineError(err: unknown): boolean {
-  if (err instanceof TypeError) return true; // fetch itself failed
   if (err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError")) return true;
   const status = isRouteErrorResponse(err) ? err.status : err instanceof Response ? err.status : null;
   if (status != null) return status === 502 || status === 503 || status === 504;
+  // A failed fetch is a TypeError, but so is every plain bug, so this has to read the text.
   return err instanceof Error && /failed to fetch|network|load failed/i.test(err.message);
 }

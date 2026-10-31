@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { UNSAFE_ErrorResponseImpl as ErrorResponse } from "react-router";
 
+import { isOfflineError } from "../offline/copies.ts";
 import { type OutboxEntry, type OutboxResult, createOutbox } from "./outbox.ts";
 import { describeError, isConnectionFailure } from "./report.ts";
+
+describe("isOfflineError", () => {
+  test("a failed fetch is offline in each browser's words, and a plain bug isn't", () => {
+    for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) expect(isOfflineError(new TypeError(message))).toBe(true);
+    expect(isOfflineError(new TypeError("Cannot read properties of undefined (reading 'title')"))).toBe(false);
+  });
+});
 
 describe("what counts as an error", () => {
   test("a real TypeError does, and a failed fetch doesn't", () => {

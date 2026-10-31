@@ -12,8 +12,6 @@ Two things reach the people who run a space without anyone having to ask:
 
 ## Environment
 
-- Worktree `../todo-feedback`, branch `feedback`, because another thread was working in
-  the main checkout. Merged to `master` at the end.
 - Run the e2e suite through `srmctl run --slots 3 --low`; it builds and starts servers.
 
 ## Decisions
@@ -77,7 +75,7 @@ Two things reach the people who run a space without anyone having to ask:
 - [x] UI: the dialog, the error page's note, the inbox, nav badge, settings toggle
 - [x] Notifications
 - [x] Tests, README, design notes
-- [ ] Full e2e suite, then merge to `master`
+- [x] Full e2e suite, then merge to `master`
 
 ## Findings
 
@@ -90,9 +88,8 @@ Two things reach the people who run a space without anyone having to ask:
   hook logs for itself.
 - **The MCP SDK turns a thrown tool error into a result,** so it never reaches
   `handleError`. `tool()` in `src/mcp.ts` reports before rethrowing.
-- **`isOfflineError` treats every `TypeError` as offline,** so a plain bug in a page says
-  "You're offline" and shows no note. The report still goes, because the reporter reads the
-  text instead. Logged in ISSUES.md.
+- **`isOfflineError` treated every `TypeError` as offline,** so a plain bug in a page said
+  "You're offline". It reads the text now, as the reporter does.
 - Vite's `isSsrBuild` is undefined under the React Router build, so the server gets a map
   too. It's harmless, and only the browser's are moved.
 
